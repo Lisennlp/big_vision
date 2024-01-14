@@ -94,7 +94,7 @@ def get_config():
         data=dict(name=dataset, split=split),
         pp_fn=pp_eval.format(lbl='label'),
         loss_name=config.loss,
-        log_steps=1000,  # Very fast O(seconds) so it's fine to run it often.
+        log_steps=2500,  # Very fast O(seconds) so it's fine to run it often.
     )
   config.evals = {}
   config.evals.train = get_eval('train[:2%]')

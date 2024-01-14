@@ -451,6 +451,11 @@ def main(argv):
 
       # Checkpoint saving
       keep_ckpt_steps = get_steps("keep_ckpt", None) or total_steps
+      logging.info(f'keep_ckpt_steps: {keep_ckpt_steps}')
+      logging.info(f'get_steps("keep_ckpt", None): {get_steps("keep_ckpt", None)}')
+      logging.info(f'total_steps: {total_steps}')
+
+      # itstime: get_steps("ckpt", None)为None的时候
       if save_ckpt_path and (
           (keep := u.itstime(step, keep_ckpt_steps, total_steps, first=False))
           or u.itstime(step, get_steps("ckpt", None), total_steps, first=True)
@@ -466,8 +471,8 @@ def main(argv):
           chrono_ckpt = multihost_utils.broadcast_one_to_all(u.chrono.save())
         chrono_shardings = jax.tree_map(lambda _: repl_sharding, chrono_ckpt)
         ckpt = ckpt | {"chrono": u.reshard(chrono_ckpt, chrono_shardings)}
-
-        # u.save_checkpoint_ts(ckpt_mngr, ckpt, save_ckpt_path, step, keep)
+        logging.info(f'\n\n[lsp]Start to save: {step} model to ‘{save_ckpt_path}’ \nkeep: {keep}\n\n')
+        u.save_checkpoint_ts(ckpt_mngr, ckpt, save_ckpt_path, step, keep)
         u.chrono.resume()
 
       for (name, evaluator, log_steps, prefix) in evaluators():

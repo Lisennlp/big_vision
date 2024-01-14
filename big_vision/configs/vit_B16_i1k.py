@@ -44,7 +44,8 @@ def get_config():
       name='imagenet2012',
       split='train[:99%]',
   )
-  config.input.batch_size = 1024
+  # lsp: * 4
+  config.input.batch_size = 1024 * 4
   config.input.cache_raw = True  # Needs up to 120GB of RAM!
   config.input.shuffle_buffer_size = 250_000
 
@@ -53,8 +54,9 @@ def get_config():
       '|onehot(1000, key="{lbl}", key_result="labels")'
       '|keep("image", "labels")'
   )
+  # lsp: randaug(2,10) -> randaug(2,15)
   config.input.pp = (
-      'decode_jpeg_and_inception_crop(224)|flip_lr|randaug(2,10)' +
+      'decode_jpeg_and_inception_crop(224)|flip_lr|randaug(2,15)' +
       pp_common.format(lbl='label')
   )
   pp_eval = 'decode|resize_small(256)|central_crop(224)' + pp_common
@@ -68,7 +70,7 @@ def get_config():
       variant='B/16',
       rep_size=True,
       pool_type='gap',
-      posemb='sincos2d',
+      posemb='learn', # lsp: sincos2d -> learn
   )
   config.dc_config = dict(
       dynamic_compose=False,
@@ -81,10 +83,12 @@ def get_config():
   config.optax = dict(mu_dtype='bfloat16')
 
   config.lr = 0.001
-  config.wd = 0.0001
-  config.schedule = dict(warmup_steps=10_000, decay_type='cosine')
-
-  config.mixup = dict(p=0.2, fold_in=None)
+  # lsp: 0.0001 -> 0.05
+  config.wd = 0.05
+  # lsp:10000 -> 1000
+  config.schedule = dict(warmup_steps=1000, decay_type='cosine')
+  # lsp: 0.2 -> 0.5
+  config.mixup = dict(p=0.5, fold_in=None)
 
   # Eval section
   def get_eval(split, dataset='imagenet2012'):

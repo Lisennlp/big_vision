@@ -395,7 +395,7 @@ def main(argv):
   # Note that training can be pre-empted during the final evaluation (i.e.
   # just after the final checkpoint has been written to disc), in which case we
   # want to run the evals.
-  if first_step in (total_steps, 0):
+  if first_step in (total_steps, 1):
     write_note("Running initial or final evals...")
     mw.step_start(first_step)
     for (name, evaluator, _, prefix) in evaluators():
@@ -406,6 +406,7 @@ def main(argv):
         with mesh, nn.logical_axis_rules([("act_batch", "data")]):
           for key, value in evaluator.run(train_state):
             mw.measure(f"{prefix}{key}", value)
+            writer.write_scalars(first_step, {f'eval_{name}_{prefix}{key}': jax.device_get(value)})
 
 ################################################################################
 #                                                                              #
@@ -442,7 +443,7 @@ def main(argv):
         measurements = jax.device_get(measurements)
         for name, value in measurements.items():
           mw.measure(name, value)
-          writer.write_scalars(step, {f'train_{name}': value})
+          writer.write_scalars(step, {f'{name}': value})
         u.chrono.tick(step)
         if not np.isfinite(measurements["training_loss"]):
           raise RuntimeError(f"The loss became nan or inf somewhere within steps "
@@ -478,7 +479,7 @@ def main(argv):
             with mesh, nn.logical_axis_rules([("act_batch", "data")]):
               for key, value in evaluator.run(train_state):
                 mw.measure(f"{prefix}{key}", jax.device_get(value))
-                writer.write_scalars(step, {f'eval_{name}_{prefix}{key}': jax.device_get(value)})
+                writer.write_scalars(step, {f'{name}_{prefix}{key}': jax.device_get(value)})
 
           u.chrono.resume()
       mw.step_end()

@@ -44,7 +44,7 @@ def get_config():
       name='imagenet2012',
       split='train[:99%]',
   )
-  config.input.batch_size = 128
+  config.input.batch_size = 1024
   config.input.cache_raw = True  # Needs up to 120GB of RAM!
   config.input.shuffle_buffer_size = 250_000
 

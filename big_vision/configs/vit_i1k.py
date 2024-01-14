@@ -85,7 +85,7 @@ def get_config(arg=None):
 
   config.input = dict()
   config.input.data = dict(
-      name='imagenet2012',
+      name='oxford_iiit_pet',
       split='train[:99%]',
   )
   config.input.batch_size = 4096
@@ -140,7 +140,7 @@ def get_config(arg=None):
   config.mixup = MIXUP_DEF[aug_setting]
 
   # Eval section
-  def get_eval(split, dataset='imagenet2012'):
+  def get_eval(split, dataset='oxford_iiit_pet'):
     return dict(
         type='classification',
         data=dict(name=dataset, split=split),
@@ -152,9 +152,9 @@ def get_config(arg=None):
   config.evals = {}
   config.evals.train = get_eval('train[:2%]')
   config.evals.minival = get_eval('train[99%:]')
-  config.evals.val = get_eval('validation')
-  config.evals.v2 = get_eval('test', dataset='imagenet_v2')
-  config.evals.real = get_eval('validation', dataset='imagenet2012_real')
+  config.evals.val = get_eval('validation', oxford_iiit_pet)
+  config.evals.v2 = get_eval('test', dataset='oxford_iiit_pet')
+  config.evals.real = get_eval('validation', dataset='oxford_iiit_pet')
   config.evals.real.pp_fn = pp_eval.format(lbl='real_label')
 
   config.fewshot = get_fewshot_lsr(runlocal=arg.runlocal)

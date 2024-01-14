@@ -1,16 +1,4 @@
-numpy>=1.26
-absl-py
 git+https://github.com/google/CommonLoopUtils
-einops
-flax
-optax
-# y
 git+https://github.com/google/flaxformer
 git+https://github.com/akolesnikoff/panopticapi.git@mute
-overrides
-tensorflow-cpu
-tfds-nightly
-# y
 tensorflow-addons
-tensorflow-text
-tensorflow-gan

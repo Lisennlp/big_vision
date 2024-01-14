@@ -44,7 +44,8 @@ def _set_model(config, model):
   if model == 'vit-i21k-augreg-b/32':
     # Load "recommended" upstream B/32 from https://arxiv.org/abs/2106.10270
     config.model_name = 'vit'
-    config.model_init = 'howto-i21k-B/32'
+    # config.model_init = 'howto-i21k-B/32'
+    config.model_init = None
     config.model = dict(variant='B/32', pool_type='tok')
   elif model == 'vit-i21k-augreg-l/16':
     config.model_name = 'vit'

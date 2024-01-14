@@ -314,9 +314,9 @@ def main(argv):
     resume_ckpt_path = fillin(config.resume)
 
   ckpt_mngr = None
-  # if save_ckpt_path or resume_ckpt_path:
+  if save_ckpt_path or resume_ckpt_path:
   #   # lsp： error
-  #   ckpt_mngr = array_serial.GlobalAsyncCheckpointManager()
+    ckpt_mngr = array_serial.GlobalAsyncCheckpointManager()
 
   if resume_ckpt_path:
     write_note(f"Resuming training from checkpoint {resume_ckpt_path}...")

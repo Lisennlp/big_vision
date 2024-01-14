@@ -417,6 +417,7 @@ def main(argv):
       workdir, just_logging=jax.process_index() > 0
   )
   keep_steps = config.get('keep_steps', list(range(5000, 400000, 5000)))
+  logging.info(f'keep_steps: {keep_steps}')
   with metric_writers.ensure_flushes(writer):
     prof = None  # Keeps track of start/stop of profiler state.
     write_note("Starting training loop, compiling the first step...")

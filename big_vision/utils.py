@@ -843,7 +843,7 @@ def tssave(mngr, pytree, path, on_commit=lambda *_, **__: None):
         on_commit_callback=functools.partial(on_commit, array_names=names))
 
 
-def save_checkpoint_ts(mngr, checkpoint, path, step, keep=True):
+def save_checkpoint_ts(mngr, checkpoint, path, step, keep=True, keep_steps=[]):
   """Preemption-safe saving of checkpoints using tssave."""
   # The tensorstore checkpoint format is a folder with (potentially) many files.
   # On some file-systems, operations on these (copy, rename, delete) are slow,
@@ -871,7 +871,7 @@ def save_checkpoint_ts(mngr, checkpoint, path, step, keep=True):
 
     gfile.rename(f"{path}-CUR", f"{path}-LAST", overwrite=True)
 
-    if last.endswith("-tmp"):
+    if last.endswith("-tmp") and step not in keep_steps:
       # If pre-emption happens here, some old checkpoints may not be deleted.
       multiprocessing.pool.ThreadPool().map(
           gfile.rmtree,

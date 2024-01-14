@@ -416,6 +416,7 @@ def main(argv):
   writer = metric_writers.create_default_writer(
       workdir, just_logging=jax.process_index() > 0
   )
+  keep_steps = config.get('keep_steps', list(range(5000, 400000, 5000)))
   with metric_writers.ensure_flushes(writer):
     prof = None  # Keeps track of start/stop of profiler state.
     write_note("Starting training loop, compiling the first step...")
@@ -468,7 +469,7 @@ def main(argv):
         chrono_shardings = jax.tree_map(lambda _: repl_sharding, chrono_ckpt)
         ckpt = ckpt | {"chrono": u.reshard(chrono_ckpt, chrono_shardings)}
         logging.info(f'\n\n[lsp]Start to save: {step} model to ‘{save_ckpt_path}’ \nkeep: {keep}\n\n')
-        u.save_checkpoint_ts(ckpt_mngr, ckpt, save_ckpt_path, step, keep)
+        u.save_checkpoint_ts(ckpt_mngr, ckpt, save_ckpt_path, step, keep, keep_steps=keep_steps)
         u.chrono.resume()
 
       for (name, evaluator, log_steps, prefix) in evaluators():

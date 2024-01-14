@@ -65,13 +65,13 @@ def get_config():
   # Model section
   config.model_name = 'vit'
   config.model = dict(
-      variant='S/16',
+      variant='M/16',
       rep_size=True,
       pool_type='gap',
       posemb='sincos2d',
   )
   config.dc_config = dict(
-      dynamic_compose=False,
+      dynamic_compose=True,
       dynamic_dropout_rate=0.0,
   )
 

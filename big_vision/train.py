@@ -133,7 +133,7 @@ def main(argv):
        batch_size, jax.process_count(), batch_size // jax.process_count(),
        jax.local_device_count(), jax.device_count(),
        batch_size // jax.device_count())
-
+  info(f'config: {config}')
   train_ds, ntrain_img = input_pipeline.training(config.input)
 
   total_steps = u.steps("total", config, ntrain_img, batch_size)
@@ -160,7 +160,7 @@ def main(argv):
   write_note("Creating model...")
   model_mod = importlib.import_module(f"big_vision.models.{config.model_name}")
   model = model_mod.Model(
-      num_classes=config.num_classes, **config.get("model", {}))
+      num_classes=config.num_classes, **config.get("model", {}), dc_config=config.get("dc_config", {}))
 
   def init(rng):
     bs = batch_size // jax.device_count()
@@ -258,6 +258,8 @@ def main(argv):
     """Update step."""
 
     images, labels = batch["image"], batch["labels"]
+    logging.info(f'images: {images.shape}')
+    logging.info(f'labels: {labels.shape}')
 
     rng = train_state["rng"]
     if config.get("mixup") and config.mixup.p:
@@ -312,8 +314,9 @@ def main(argv):
     resume_ckpt_path = fillin(config.resume)
 
   ckpt_mngr = None
-  if save_ckpt_path or resume_ckpt_path:
-    ckpt_mngr = array_serial.GlobalAsyncCheckpointManager()
+  # if save_ckpt_path or resume_ckpt_path:
+  #   # lsp： error
+  #   ckpt_mngr = array_serial.GlobalAsyncCheckpointManager()
 
   if resume_ckpt_path:
     write_note(f"Resuming training from checkpoint {resume_ckpt_path}...")
@@ -344,6 +347,8 @@ def main(argv):
     parameter_overview.log_parameter_overview(
         train_state["params"], msg="restored params",
         include_stats="global", jax_logging_process=0)
+  else:
+    write_note(f"Initialize model from {config.model_init}...")
 
 
 ################################################################################
@@ -419,9 +424,12 @@ def main(argv):
         with mesh, nn.logical_axis_rules([("act_batch", "data")]):
           train_state, measurements = update_fn(train_state, batch)
 
+
     # On the first host, let's always profile a handful of early steps.
     if jax.process_index() == 0:
       prof = u.startstop_prof(prof, step, first_step, get_steps("log_training"))
+
+    # logging.info(f'measurements: {measurements}')
 
     # Report training progress
     if (u.itstime(step, get_steps("log_training"), total_steps, host=0)
@@ -455,7 +463,7 @@ def main(argv):
       chrono_shardings = jax.tree_map(lambda _: repl_sharding, chrono_ckpt)
       ckpt = ckpt | {"chrono": u.reshard(chrono_ckpt, chrono_shardings)}
 
-      u.save_checkpoint_ts(ckpt_mngr, ckpt, save_ckpt_path, step, keep)
+      # u.save_checkpoint_ts(ckpt_mngr, ckpt, save_ckpt_path, step, keep)
       u.chrono.resume()
 
     for (name, evaluator, log_steps, prefix) in evaluators():

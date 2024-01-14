@@ -734,7 +734,7 @@ class _Model(nn.Module):
 
   @nn.compact
   def __call__(self, image, *, train=False):
-    logging.info(f'width: {self.width} depth: {self.depth} num_heads: {num_heads} dc_config: {dc_config}')
+    logging.info(f'width: {self.width} depth: {self.depth} num_heads: {self.num_heads} dc_config: {self.dc_config}')
     out = {}
     image = jnp.asarray(image, self.dtype_mm)
 

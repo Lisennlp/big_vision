@@ -450,10 +450,6 @@ def main(argv):
                             f"[{step - get_steps('log_training')}, {step}]")
 
       # Checkpoint saving
-      keep_ckpt_steps = get_steps("keep_ckpt", None) or total_steps
-      logging.info(f'keep_ckpt_steps: {keep_ckpt_steps}')
-      logging.info(f'get_steps("keep_ckpt", None): {get_steps("keep_ckpt", None)}')
-      logging.info(f'total_steps: {total_steps}')
 
       # itstime: get_steps("ckpt", None)为None的时候
       if save_ckpt_path and (

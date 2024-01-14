@@ -69,7 +69,7 @@ def get_config():
   config.model = dict(
       variant='B/16',
       rep_size=True,
-      pool_type='gap',
+      pool_type='tok', # lsp: gap -> tok
       posemb='learn', # lsp: sincos2d -> learn
   )
   config.dc_config = dict(
@@ -89,6 +89,8 @@ def get_config():
   config.schedule = dict(warmup_steps=1000, decay_type='cosine')
   # lsp: 0.2 -> 0.5
   config.mixup = dict(p=0.5, fold_in=None)
+
+  config.resume = None
 
   # Eval section
   def get_eval(split, dataset='imagenet2012'):

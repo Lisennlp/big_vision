@@ -44,7 +44,7 @@ def get_config():
       name='imagenet2012',
       split='train[:99%]',
   )
-  config.input.batch_size = 128
+  config.input.batch_size = 1024
   config.input.cache_raw = True  # Needs up to 120GB of RAM!
   config.input.shuffle_buffer_size = 250_000
 
@@ -70,10 +70,6 @@ def get_config():
       pool_type='gap',
       posemb='sincos2d',
   )
-  config.dc_config = dict(
-      dynamic_compose=False,
-      dynamic_dropout_rate=0.0,
-  )
 
   # Optimizer section
   config.grad_clip_norm = 1.0
@@ -85,6 +81,11 @@ def get_config():
   config.schedule = dict(warmup_steps=10_000, decay_type='cosine')
 
   config.mixup = dict(p=0.2, fold_in=None)
+
+  config.dc_config = dict(
+      dynamic_compose=False,
+      dynamic_dropout_rate=0.0,
+  )
 
   # Eval section
   def get_eval(split, dataset='imagenet2012'):

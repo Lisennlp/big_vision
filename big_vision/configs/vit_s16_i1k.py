@@ -86,6 +86,7 @@ def get_config():
       dynamic_compose=False,
       dynamic_dropout_rate=0.0,
   )
+  config.resume = None
 
   # Eval section
   def get_eval(split, dataset='imagenet2012'):

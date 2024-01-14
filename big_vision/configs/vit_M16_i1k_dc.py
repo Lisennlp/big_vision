@@ -86,6 +86,8 @@ def get_config():
   config.schedule = dict(warmup_steps=10_000, decay_type='cosine')
 
   config.mixup = dict(p=0.2, fold_in=None)
+  config.resume = ''
+
 
   # Eval section
   def get_eval(split, dataset='imagenet2012'):

@@ -2,3 +2,5 @@ git+https://github.com/google/CommonLoopUtils
 git+https://github.com/google/flaxformer
 git+https://github.com/akolesnikoff/panopticapi.git@mute
 tensorflow-addons
+-f https://storage.googleapis.com/jax-releases/libtpu_releases.html
+jax[tpu]==0.4.23

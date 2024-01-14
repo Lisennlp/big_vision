@@ -348,7 +348,7 @@ def main(argv):
         train_state["params"], msg="restored params",
         include_stats="global", jax_logging_process=0)
   else:
-    write_note(f"Initialize model from {config.model_init}...")
+    write_note(f"Initialize model from {config.get('model_init')}...")
 
 
 ################################################################################

@@ -74,6 +74,7 @@ def get_config():
       dynamic_compose=True,
       dynamic_dropout_rate=0.0,
   )
+  config.model_init = None
 
   # Optimizer section
   config.grad_clip_norm = 1.0

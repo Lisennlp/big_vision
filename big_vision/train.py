@@ -317,7 +317,7 @@ def main(argv):
 
   ckpt_mngr = None
   if save_ckpt_path or resume_ckpt_path:
-  #   # lsp： error
+  #   # lsp： error， 需要jax>=0.4.23
     ckpt_mngr = array_serial.GlobalAsyncCheckpointManager()
 
   if resume_ckpt_path:
@@ -397,7 +397,7 @@ def main(argv):
   # Note that training can be pre-empted during the final evaluation (i.e.
   # just after the final checkpoint has been written to disc), in which case we
   # want to run the evals.
-  if first_step in (total_steps, 1):
+  if first_step in (total_steps, 90000, 371588):
     write_note("Running initial or final evals...")
     mw.step_start(first_step)
     for (name, evaluator, _, prefix) in evaluators():
@@ -409,6 +409,7 @@ def main(argv):
           for key, value in evaluator.run(train_state):
             mw.measure(f"{prefix}{key}", value)
             writer.write_scalars(first_step, {f'eval_{name}_{prefix}{key}': jax.device_get(value)})
+  exit(0)
 
 ################################################################################
 #                                                                              #

@@ -45,13 +45,18 @@ def get_eval_fn(predict_fn, loss_name):
     loss = getattr(u, loss_name)(
         logits=logits, labels=labels, reduction=False)
     loss = jnp.sum(loss * mask)
-
+    print(f'logits: {logits.shape}')
     top1_idx = jnp.argmax(logits, axis=1)
+    print(f'top1_idx: {top1_idx.shape}')
+
     # Extracts the label at the highest logit index for each image.
     top1_correct = jnp.take_along_axis(
         labels, top1_idx[:, None], axis=1)[:, 0]
+    print(f'top1_correct: {top1_correct.shape}')
     ncorrect = jnp.sum(top1_correct * mask)
+    print(f'ncorrect: {ncorrect}')
     nseen = jnp.sum(mask)
+    print(f'nseen: {nseen}')
     return ncorrect, loss, nseen
   return _eval_fn
 

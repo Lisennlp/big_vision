@@ -33,7 +33,7 @@ API = 'jit'
 # To avoid re-compiling the function for every new instance of the same
 # evaluator on a different dataset!
 @functools.cache
-def get_eval_fn(predict_fn, loss_name):
+def get_eval_fn(predict_fn, loss_name, topk=1):
   """Produces eval function, also applies pmap."""
   @jax.jit
   def _eval_fn(train_state, batch, labels, mask):
@@ -46,15 +46,15 @@ def get_eval_fn(predict_fn, loss_name):
         logits=logits, labels=labels, reduction=False)
     loss = jnp.sum(loss * mask)
     print(f'logits: {logits.shape}')
-    top1_idx = jnp.argmax(logits, axis=1)
-    print(f'top1_idx: {top1_idx.shape}')
+    # batch * topk
+    topk_values, topk_idx = jax.lax.top_k(logits, k=topk)
+    ncorrect = 0
+    for i in range(topk):
+        top1_idx = topk_idx[:,i]
+        top1_correct = jnp.take_along_axis(labels, top1_idx[:, None], axis=1)[:, 0]
+        correct = jnp.sum(top1_correct * mask)
 
-    # Extracts the label at the highest logit index for each image.
-    top1_correct = jnp.take_along_axis(
-        labels, top1_idx[:, None], axis=1)[:, 0]
-    print(f'top1_correct: {top1_correct.shape}')
-    ncorrect = jnp.sum(top1_correct * mask)
-    print(f'ncorrect: {ncorrect}')
+        ncorrect += correct
     nseen = jnp.sum(mask)
     print(f'nseen: {nseen}')
     return ncorrect, loss, nseen
@@ -65,7 +65,7 @@ class Evaluator:
   """Classification evaluator."""
 
   def __init__(self, predict_fn, data, pp_fn, batch_size, loss_name,
-               cache_final=True, cache_raw=False, prefetch=1,
+               cache_final=True, cache_raw=False, prefetch=1, topk=1,
                label_key='labels', *, devices):
     data = ds_core.get(**data)
     pp_fn = pp_builder.get_preprocess_fn(pp_fn)
@@ -74,7 +74,7 @@ class Evaluator:
         num_ex_per_process=data.num_examples_per_process(),
         cache_final=cache_final, cache_raw=cache_raw)
     self.data_iter = input_pipeline.start_global(self.ds, devices, prefetch)
-    self.eval_fn = get_eval_fn(predict_fn, loss_name)
+    self.eval_fn = get_eval_fn(predict_fn, loss_name, topk=topk)
     self.label_key = label_key
 
   def run(self, train_state):
@@ -87,5 +87,5 @@ class Evaluator:
       ncorrect += batch_ncorrect
       loss += batch_losses
       nseen += batch_nseen
-    yield ('prec@1', ncorrect / nseen)
+    yield (f'prec@{topk}', ncorrect / nseen)
     yield ('loss', loss / nseen)

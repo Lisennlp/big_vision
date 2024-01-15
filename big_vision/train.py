@@ -237,6 +237,8 @@ def main(argv):
       "params": params_sharding, "opt": opt_sharding, "rng": repl_sharding}
   train_state = {
       "params": params, "opt": opt, "rng": rng_loop}
+
+  logging.info(f'train_state_sharding: {train_state_sharding}')
   del params, opt, rng_loop  # Delete to avoid memory leak or accidental reuse.
 
   write_note("Logging parameter overview...")
@@ -413,6 +415,7 @@ def main(argv):
 #                                  Train Loop                                  #
 #                                                                              #
 ################################################################################
+  # process为0的上传数据到workdir，其余的机器仅仅logging
   writer = metric_writers.create_default_writer(
       workdir, just_logging=jax.process_index() > 0
   )

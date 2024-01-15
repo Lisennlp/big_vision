@@ -238,7 +238,7 @@ def main(argv):
   train_state = {
       "params": params, "opt": opt, "rng": rng_loop}
 
-  logging.info(f'train_state_sharding: {train_state_sharding}')
+  # logging.info(f'train_state_sharding: {train_state_sharding}')
   del params, opt, rng_loop  # Delete to avoid memory leak or accidental reuse.
 
   write_note("Logging parameter overview...")
@@ -394,6 +394,11 @@ def main(argv):
   first_step = int(jax.device_get(first_step_device))
   u.chrono.inform(first_step=first_step)
 
+  # process为0的上传数据到workdir，其余的机器仅仅logging
+  writer = metric_writers.create_default_writer(
+      workdir, just_logging=jax.process_index() > 0
+  )
+
   # Note that training can be pre-empted during the final evaluation (i.e.
   # just after the final checkpoint has been written to disc), in which case we
   # want to run the evals.
@@ -409,17 +414,15 @@ def main(argv):
           for key, value in evaluator.run(train_state):
             mw.measure(f"{prefix}{key}", value)
             writer.write_scalars(first_step, {f'eval_{name}_{prefix}{key}': jax.device_get(value)})
-  exit(0)
 
+  if config.only_eval:
+    exit(0)
 ################################################################################
 #                                                                              #
 #                                  Train Loop                                  #
 #                                                                              #
 ################################################################################
-  # process为0的上传数据到workdir，其余的机器仅仅logging
-  writer = metric_writers.create_default_writer(
-      workdir, just_logging=jax.process_index() > 0
-  )
+
   keep_steps = config.get('keep_steps', list(range(5000, 400000, 5000)))
   logging.info(f'keep_steps: {keep_steps}')
   with metric_writers.ensure_flushes(writer):

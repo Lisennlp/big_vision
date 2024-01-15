@@ -86,6 +86,7 @@ def get_config():
 
   config.mixup = dict(p=0.2, fold_in=None)
   config.resume = ''
+  config.only_eval = False
 
 
   # Eval section

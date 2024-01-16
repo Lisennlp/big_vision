@@ -46,15 +46,16 @@ def get_eval_fn(predict_fn, loss_name, topk=1):
         logits=logits, labels=labels, reduction=False)
     loss = jnp.sum(loss * mask)
     print(f'logits: {logits.shape}')
-    # batch * topk
+    #lsp: batch * topk
     topk_values, topk_idx = jax.lax.top_k(logits, k=topk)
-    ncorrect = 0
+    top1_correct = jnp.zeros_like(mask, dtype=jnp.bool_)
     for i in range(topk):
         top1_idx = topk_idx[:,i]
-        top1_correct = jnp.take_along_axis(labels, top1_idx[:, None], axis=1)[:, 0]
-        correct = jnp.sum(top1_correct * mask)
+        correct = jnp.take_along_axis(labels, top1_idx[:, None], axis=1)[:, 0]
+        correct = correct.astype(jnp.bool_)
+        top1_correct |= correct
 
-        ncorrect += correct
+    ncorrect = jnp.sum(top1_correct * mask)
     nseen = jnp.sum(mask)
     print(f'nseen: {nseen}')
     return ncorrect, loss, nseen
@@ -83,10 +84,11 @@ class Evaluator:
     ncorrect, loss, nseen = 0, 0, 0
     for _, batch in zip(range(self.steps), self.data_iter):
       labels, mask = batch.pop(self.label_key), batch.pop('_mask')
-      print(f'labels: {labels}')
-      print(f'mask: {mask}')
       batch_ncorrect, batch_losses, batch_nseen = jax.device_get(
           self.eval_fn(train_state, batch, labels, mask))
+
+      # print(f'labels: {jax.device_get(labels)}')
+      # print(f'mask: {jax.device_get(mask)}')
       ncorrect += batch_ncorrect
       loss += batch_losses
       nseen += batch_nseen

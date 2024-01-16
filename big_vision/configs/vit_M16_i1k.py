@@ -87,6 +87,7 @@ def get_config():
   config.mixup = dict(p=0.2, fold_in=None)
   config.resume = ''
   config.only_eval = False
+  config.topk = 5
 
 
   # Eval section
@@ -97,7 +98,7 @@ def get_config():
         pp_fn=pp_eval.format(lbl='label'),
         loss_name=config.loss,
         log_steps=2500,  # Very fast O(seconds) so it's fine to run it often.
-        topk=5,  # lsp
+        topk=config.topk,  # lsp
     )
   config.evals = {}
   config.evals.train = get_eval('train[:2%]')

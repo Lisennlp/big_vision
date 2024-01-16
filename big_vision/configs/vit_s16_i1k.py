@@ -88,6 +88,7 @@ def get_config():
   )
   config.resume = ''
   config.only_eval = False
+  config.topk = 5
 
   # Eval section
   def get_eval(split, dataset='imagenet2012'):
@@ -97,7 +98,7 @@ def get_config():
         pp_fn=pp_eval.format(lbl='label'),
         loss_name=config.loss,
         log_steps=2500,  # Very fast O(seconds) so it's fine to run it often.
-        topk=5,
+        topk=config.topk,
     )
   config.evals = {}
   config.evals.train = get_eval('train[:2%]')

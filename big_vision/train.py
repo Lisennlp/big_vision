@@ -415,6 +415,7 @@ def main(argv):
             mw.measure(f"{prefix}{key}", value)
             writer.write_scalars(first_step, {f'eval_{name}_{prefix}{key}': jax.device_get(value)})
 
+  print(f'config.only_eval: {config.only_eval}')
   if config.only_eval:
     exit(0)
 ################################################################################

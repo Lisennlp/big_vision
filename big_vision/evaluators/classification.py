@@ -67,6 +67,7 @@ class Evaluator:
   def __init__(self, predict_fn, data, pp_fn, batch_size, loss_name,
                cache_final=True, cache_raw=False, prefetch=1, topk=1,
                label_key='labels', *, devices):
+    self.topk = topk
     data = ds_core.get(**data)
     pp_fn = pp_builder.get_preprocess_fn(pp_fn)
     self.ds, self.steps = input_pipeline.make_for_inference(
@@ -82,10 +83,12 @@ class Evaluator:
     ncorrect, loss, nseen = 0, 0, 0
     for _, batch in zip(range(self.steps), self.data_iter):
       labels, mask = batch.pop(self.label_key), batch.pop('_mask')
+      print(f'labels: {labels}')
+      print(f'mask: {mask}')
       batch_ncorrect, batch_losses, batch_nseen = jax.device_get(
           self.eval_fn(train_state, batch, labels, mask))
       ncorrect += batch_ncorrect
       loss += batch_losses
       nseen += batch_nseen
-    yield (f'prec@{topk}', ncorrect / nseen)
+    yield (f'prec@{self.topk}', ncorrect / nseen)
     yield ('loss', loss / nseen)

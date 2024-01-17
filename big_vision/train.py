@@ -23,6 +23,8 @@ import functools
 import importlib
 # import multiprocessing.pool
 import os
+import json
+from etils import epath
 
 from absl import app
 from absl import flags
@@ -402,7 +404,12 @@ def main(argv):
   # Note that training can be pre-empted during the final evaluation (i.e.
   # just after the final checkpoint has been written to disc), in which case we
   # want to run the evals.
-  if first_step in (total_steps, 90000, 371588):
+  print(f'config.only_eval: {config.only_eval}')
+  if first_step in (total_steps, 90000, 371588) or config.only_eval:
+    if jax.process_index() == 0:
+      eval_path = epath.Path(f'{first_step}_eval.jsonl')
+      eval_path = workdir / eval_path
+      eval_writer = eval_path.open('w')
     write_note("Running initial or final evals...")
     mw.step_start(first_step)
     for (name, evaluator, _, prefix) in evaluators():
@@ -412,10 +419,16 @@ def main(argv):
       with u.chrono.log_timing(f"z/secs/eval/{name}"):
         with mesh, nn.logical_axis_rules([("act_batch", "data")]):
           for key, value in evaluator.run(train_state):
-            mw.measure(f"{prefix}{key}", value)
-            writer.write_scalars(first_step, {f'eval_{name}_{prefix}{key}': jax.device_get(value)})
-
-  print(f'config.only_eval: {config.only_eval}')
+            new_key = f'{prefix}{key}'
+            new_value = jax.device_get(value)
+            eval_results[new_key] = new_value
+            mw.measure(new_key, new_value)
+            d = {new_key: new_value}
+            writer.write_scalars(first_step,  d)
+            if jax.process_index() == 0:
+              eval_writer.write(json.dumps(d, ensure_ascii=False))
+    if jax.process_index() == 0:
+       eval_writer.close()
   if config.only_eval:
     exit(0)
 ################################################################################
@@ -490,7 +503,7 @@ def main(argv):
             with mesh, nn.logical_axis_rules([("act_batch", "data")]):
               for key, value in evaluator.run(train_state):
                 mw.measure(f"{prefix}{key}", jax.device_get(value))
-                writer.write_scalars(step, {f'{name}_{prefix}{key}': jax.device_get(value)})
+                writer.write_scalars(step, {f'{prefix}{key}': jax.device_get(value)})
 
           u.chrono.resume()
       mw.step_end()

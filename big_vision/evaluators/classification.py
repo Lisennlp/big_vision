@@ -49,16 +49,18 @@ def get_eval_fn(predict_fn, loss_name, topk=1):
     #lsp: batch * topk
     topk_values, topk_idx = jax.lax.top_k(logits, k=topk)
     top1_correct = jnp.zeros_like(mask, dtype=jnp.bool_)
+    corrects = []
     for i in range(topk):
         top1_idx = topk_idx[:,i]
         correct = jnp.take_along_axis(labels, top1_idx[:, None], axis=1)[:, 0]
         correct = correct.astype(jnp.bool_)
         top1_correct |= correct
+        top1_correct = jnp.sum(top1_correct * mask)
+        corrects.append(top1_correct)
 
-    ncorrect = jnp.sum(top1_correct * mask)
     nseen = jnp.sum(mask)
     print(f'nseen: {nseen}')
-    return ncorrect, loss, nseen
+    return corrects, loss, nseen
   return _eval_fn
 
 
@@ -76,21 +78,22 @@ class Evaluator:
         num_ex_per_process=data.num_examples_per_process(),
         cache_final=cache_final, cache_raw=cache_raw)
     self.data_iter = input_pipeline.start_global(self.ds, devices, prefetch)
-    self.eval_fn = get_eval_fn(predict_fn, loss_name, topk=topk)
+    self.eval_fn = get_eval_fn(predict_fn, loss_name, topk)
     self.label_key = label_key
 
   def run(self, train_state):
     """Computes all metrics."""
-    ncorrect, loss, nseen = 0, 0, 0
+    ncorrects, loss, nseen = [0] * self.topk, 0, 0
     for _, batch in zip(range(self.steps), self.data_iter):
       labels, mask = batch.pop(self.label_key), batch.pop('_mask')
-      batch_ncorrect, batch_losses, batch_nseen = jax.device_get(
+      batch_ncorrects, batch_losses, batch_nseen = jax.device_get(
           self.eval_fn(train_state, batch, labels, mask))
-
       # print(f'labels: {jax.device_get(labels)}')
       # print(f'mask: {jax.device_get(mask)}')
-      ncorrect += batch_ncorrect
+      for i in range(self.topk):
+        ncorrects[i] += batch_ncorrects[i]
       loss += batch_losses
       nseen += batch_nseen
-    yield (f'prec@{self.topk}', ncorrect / nseen)
+    print(f'prec@{t}: {ncorrects[t] / nseen}')
+    yield (f'prec@{topk}', ncorrects[-1] / nseen)
     yield ('loss', loss / nseen)

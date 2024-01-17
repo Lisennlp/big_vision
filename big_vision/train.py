@@ -427,7 +427,7 @@ def main(argv):
             d = {new_key: new_value}
             writer.write_scalars(first_step,  d)
             if jax.process_index() == 0:
-              eval_writer.dump(d)
+              json.dump(d, eval_writer)
     if jax.process_index() == 0:
        eval_writer.close()
   if config.only_eval:

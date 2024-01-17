@@ -407,7 +407,7 @@ def main(argv):
   print(f'config.only_eval: {config.only_eval}')
   if first_step in (total_steps, 90000, 371588) or config.only_eval:
     if jax.process_index() == 0:
-      p = os.path.join(os.path.dirname(resume_ckpt_path), f'step{first_step}.eval.jsonl')
+      p = os.path.join(os.path.dirname(resume_ckpt_path), 'eval_outpus', f'{first_step}.jsonl')
       eval_path = epath.Path(p)
       # eval_path = workdir / eval_path
       eval_writer = eval_path.open('w')

@@ -411,6 +411,7 @@ def main(argv):
       eval_path = epath.Path(p)
       # eval_path = workdir / eval_path
       eval_writer = eval_path.open('w')
+      print(f'eval_path: {eval_path}')
     write_note("Running initial or final evals...")
     mw.step_start(first_step)
     for (name, evaluator, _, prefix) in evaluators():
@@ -422,12 +423,11 @@ def main(argv):
           for key, value in evaluator.run(train_state):
             new_key = f'{prefix}{key}'
             new_value = jax.device_get(value)
-            eval_results[new_key] = new_value
             mw.measure(new_key, new_value)
             d = {new_key: new_value}
             writer.write_scalars(first_step,  d)
             if jax.process_index() == 0:
-              eval_writer.write(json.dumps(d, ensure_ascii=False))
+              eval_writer.dump(d)
     if jax.process_index() == 0:
        eval_writer.close()
   if config.only_eval:

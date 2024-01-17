@@ -406,12 +406,12 @@ def main(argv):
   # want to run the evals.
   print(f'config.only_eval: {config.only_eval}')
   if first_step in (total_steps, 90000, 371588) or config.only_eval:
-    if jax.process_index() == 0:
-      p = os.path.join(os.path.dirname(resume_ckpt_path), f'step{first_step}.eval.jsonl')
-      eval_path = epath.Path(p)
-      # eval_path = workdir / eval_path
-      eval_writer = eval_path.open('w')
-      print(f'eval_path: {eval_path}')
+    # if jax.process_index() == 0:
+    #   p = os.path.join(os.path.dirname(resume_ckpt_path), f'step{first_step}.eval.jsonl')
+    #   eval_path = epath.Path(p)
+    #   # eval_path = workdir / eval_path
+    #   eval_writer = eval_path.open('w')
+    #   print(f'eval_path: {eval_path}')
     write_note("Running initial or final evals...")
     mw.step_start(first_step)
     for (name, evaluator, _, prefix) in evaluators():
@@ -426,12 +426,12 @@ def main(argv):
             mw.measure(new_key, new_value)
             d = {new_key: new_value}
             writer.write_scalars(first_step,  d)
-            if jax.process_index() == 0:
-              json.dump(d, eval_writer)
-    if jax.process_index() == 0:
-       eval_writer.close()
+            # if jax.process_index() == 0:
+            #   json.dump(d, eval_writer)
+    # if jax.process_index() == 0:
+    #    eval_writer.close()
   if config.only_eval:
-    exit(0)
+    return 
 ################################################################################
 #                                                                              #
 #                                  Train Loop                                  #

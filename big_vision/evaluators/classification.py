@@ -55,8 +55,8 @@ def get_eval_fn(predict_fn, loss_name, topk=1):
         correct = jnp.take_along_axis(labels, top1_idx[:, None], axis=1)[:, 0]
         correct = correct.astype(jnp.bool_)
         top1_correct |= correct
-        top1_correct = jnp.sum(top1_correct * mask)
-        corrects.append(top1_correct)
+        top1_sum_correct = jnp.sum(top1_correct * mask)
+        corrects.append(top1_sum_correct)
 
     nseen = jnp.sum(mask)
     print(f'nseen: {nseen}')
@@ -90,10 +90,12 @@ class Evaluator:
           self.eval_fn(train_state, batch, labels, mask))
       # print(f'labels: {jax.device_get(labels)}')
       # print(f'mask: {jax.device_get(mask)}')
-      for i in range(self.topk):
-        ncorrects[i] += batch_ncorrects[i]
       loss += batch_losses
       nseen += batch_nseen
-    print(f'prec@{t}: {ncorrects[t] / nseen}')
-    yield (f'prec@{topk}', ncorrects[-1] / nseen)
+
+      for i in range(self.topk):
+        ncorrects[i] += batch_ncorrects[i]
+
+    for i in range(1, self.topk + 1, 1):
+      yield (f'prec@{i}', ncorrects[i] / nseen)
     yield ('loss', loss / nseen)

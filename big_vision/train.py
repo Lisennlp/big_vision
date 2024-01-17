@@ -21,7 +21,7 @@ This is a basic variant of a training loop, good starting point for fancy ones.
 
 import functools
 import importlib
-import multiprocessing.pool
+# import multiprocessing.pool
 import os
 
 from absl import app
@@ -100,7 +100,7 @@ def main(argv):
     save_ckpt_path = os.path.join(workdir, "checkpoint.bv")
 
   # The pool is used to perform misc operations such as logging in async way.
-  pool = multiprocessing.pool.ThreadPool()
+  # pool = multiprocessing.pool.ThreadPool()
 
   # Here we register preprocessing ops from modules listed on `pp_modules`.
   for m in config.get("pp_modules", ["ops_general", "ops_image", "ops_text"]):
@@ -503,8 +503,8 @@ def main(argv):
     # Last note needs to happen before the pool's closed =)
     write_note(f"Done!\n{u.chrono.note}")
 
-    pool.close()
-    pool.join()
+    # pool.close()
+    # pool.join()
     mw.close()
 
     if ckpt_mngr:

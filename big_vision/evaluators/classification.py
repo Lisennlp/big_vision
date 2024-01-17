@@ -96,6 +96,6 @@ class Evaluator:
       for i in range(self.topk):
         ncorrects[i] += batch_ncorrects[i]
 
-    for i in range(1, self.topk + 1, 1):
-      yield (f'prec@{i}', ncorrects[i] / nseen)
+    for i in range(self.topk):
+      yield (f'prec@{i + 1}', ncorrects[i] / nseen)
     yield ('loss', loss / nseen)

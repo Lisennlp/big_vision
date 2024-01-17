@@ -88,7 +88,7 @@ def get_config():
   )
   config.resume = ''
   config.only_eval = False
-  config.topk = 5
+  config.topk = 10
 
   # Eval section
   def get_eval(split, dataset='imagenet2012'):

@@ -87,7 +87,7 @@ def get_config():
   config.mixup = dict(p=0.2, fold_in=None)
   config.resume = ''
   config.only_eval = False
-  config.topk = 5
+  config.topk = 10
 
 
   # Eval section

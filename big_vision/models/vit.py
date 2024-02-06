@@ -741,7 +741,7 @@ class _Model(nn.Module):
     # Patch extraction,
     # (16, 16, 3, 768)， conv shape: (*patch_size, 3, width)
     # image:  batch * 长 * 宽 * 3
-    # 得到的向量x: batch * (长 * 宽 / patch_size) * 3 * width
+    # 得到的向量x: batch * (长/ 16 * 宽 / 16)  * width
     x = out["stem"] = nn.Conv(
         self.width, self.patch_size, strides=self.patch_size,
         padding="VALID", name="embedding", dtype=self.dtype_mm)(image)

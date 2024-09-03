@@ -405,7 +405,8 @@ def main(argv):
   # just after the final checkpoint has been written to disc), in which case we
   # want to run the evals.
   print(f'config.only_eval: {config.only_eval}')
-  if first_step in (total_steps, 90000, 371588) or config.only_eval:
+  # if first_step in (total_steps, 90000, 371588) or config.only_eval:
+  if config.only_eval:
     if jax.process_index() == 0:
       p = os.path.join(os.path.dirname(os.path.dirname(resume_ckpt_path)), 'eval_outpus', f'{first_step}.jsonl')
       eval_path = epath.Path(p)

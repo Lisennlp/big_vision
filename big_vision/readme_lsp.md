@@ -16,7 +16,7 @@ if class_id.endswith('/'):
 features = ...
 ```
 
-## 测试tpu是否可用
+## Test tpu
 ```
 TPU_NAME=llm-jax-v4-16-10
 ZONE=us-central2-b

@@ -1,6 +1,7 @@
 ## Note
 
-If you process imagenet_v2, the imagenet_v2_dataset_builder file of tensorflow_datasets package may report an error:
+If you process imagenet_v2, the imagenet_v2_dataset_builder file of tensorflow_datasets package may report an error: ```ValueError: invalid literal for int() with base 10:.......```
+the report py file is:
 
 ```
 /home/xxx/.local/lib/python3.9/site-packages/tensorflow_datasets/datasets/imagenet_v2/imagenet_v2_dataset_builder.py

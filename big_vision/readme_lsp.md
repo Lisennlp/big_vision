@@ -6,7 +6,7 @@ the report py file is:
 ```
 /home/xxx/.local/lib/python3.9/site-packages/tensorflow_datasets/datasets/imagenet_v2/imagenet_v2_dataset_builder.py
 ```
-FunctionL: _generate_examples(self......) 
+Reoport function is : _generate_examples(self......) 
 
 Because class_id like：100/, 11/
 so, int(class_id) will occur error.，You can modify it in tensorflow_datasets package as follows:

@@ -191,7 +191,7 @@ def main(argv):
     for name, params in params_cpu.items():
       parameter_overview.log_parameter_overview(params, msg=f"{name} params")
       mw.measure(f"num_params_{name}",
-                 sum(p.size for p in jax.tree_leaves(params)))
+                 sum(p.size for p in jax.tree_util.tree_leaves(params)))
 
   write_note(f"Initializing {config.optax_name} optimizer...")
   # For now, we explicitly only optimize the student parameters as there's
@@ -266,11 +266,11 @@ def main(argv):
     params["student"] = w
 
     # Take some logging measurements
-    gs = jax.tree_leaves(bv_optax.replace_frozen(config.schedule, grads, 0.))
+    gs = jax.tree_util.tree_leaves(bv_optax.replace_frozen(config.schedule, grads, 0.))
     measurements["l2_grads"] = jnp.sqrt(sum([jnp.vdot(g, g) for g in gs]))
-    ps = jax.tree_leaves(w)
+    ps = jax.tree_util.tree_leaves(w)
     measurements["l2_params"] = jnp.sqrt(sum([jnp.vdot(p, p) for p in ps]))
-    us = jax.tree_leaves(updates)
+    us = jax.tree_util.tree_leaves(updates)
     measurements["l2_updates"] = jnp.sqrt(sum([jnp.vdot(u, u) for u in us]))
 
     return params, opt, rng, l, measurements

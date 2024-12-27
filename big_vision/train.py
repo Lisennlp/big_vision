@@ -195,7 +195,7 @@ def main(argv):
   sched_fns_cpu = [u.jit_cpu()(sched_fn) for sched_fn in sched_fns]
 
   if jax.process_index() == 0:
-    num_params = sum(np.prod(p.shape) for p in jax.tree_leaves(params_shape))
+    num_params = sum(np.prod(p.shape) for p in jax.tree_util.tree_leaves(params_shape))
     mw.measure("num_params", num_params)
 
 ################################################################################
@@ -291,11 +291,11 @@ def main(argv):
     params = optax.apply_updates(params, updates)
 
     measurements = {"training_loss": loss}
-    gs = jax.tree_leaves(bv_optax.replace_frozen(config.schedule, grads, 0.))
+    gs = jax.tree_util.tree_leaves(bv_optax.replace_frozen(config.schedule, grads, 0.))
     measurements["l2_grads"] = jnp.sqrt(sum([jnp.sum(g * g) for g in gs]))
-    ps = jax.tree_leaves(params)
+    ps = jax.tree_util.tree_leaves(params)
     measurements["l2_params"] = jnp.sqrt(sum([jnp.sum(p * p) for p in ps]))
-    us = jax.tree_leaves(updates)
+    us = jax.tree_util.tree_leaves(updates)
     measurements["l2_updates"] = jnp.sqrt(sum([jnp.sum(u * u) for u in us]))
 
     return {"params": params, "opt": opt, "rng": rng}, measurements
@@ -318,7 +318,7 @@ def main(argv):
     resume_ckpt_path = fillin(config.resume)
 
   ckpt_mngr = None
-  if save_ckpt_path or resume_ckpt_path:
+  if (save_ckpt_path or resume_ckpt_path)  and config.save_checkpoint:
   #   # lsp： error， 需要jax>=0.4.23
     ckpt_mngr = array_serial.GlobalAsyncCheckpointManager()
 
@@ -397,6 +397,7 @@ def main(argv):
   u.chrono.inform(first_step=first_step)
 
   # process为0的上传数据到workdir，其余的机器仅仅logging
+  tensorboard_dir = os.path.join(workdir, 'tensorboard')
   writer = metric_writers.create_default_writer(
       workdir, just_logging=jax.process_index() > 0
   )
@@ -496,7 +497,8 @@ def main(argv):
         chrono_shardings = jax.tree_map(lambda _: repl_sharding, chrono_ckpt)
         ckpt = ckpt | {"chrono": u.reshard(chrono_ckpt, chrono_shardings)}
         logging.info(f'\n\n[lsp]Start to save: {step} model to ‘{save_ckpt_path}’ \nkeep: {keep}\n\n')
-        u.save_checkpoint_ts(ckpt_mngr, ckpt, save_ckpt_path, step, keep, keep_steps=keep_steps)
+        if ckpt_mngr is not None:
+          u.save_checkpoint_ts(ckpt_mngr, ckpt, save_ckpt_path, step, keep, keep_steps=keep_steps)
         u.chrono.resume()
 
       for (name, evaluator, log_steps, prefix) in evaluators():

@@ -30,12 +30,12 @@ TPU_NAME=llm-jax-v3-8-10
 ZONE=us-central1-a
 CODEDIR=/home/xxx/projects/big_vision
 CONFIG=vit_M16_i1k.py
-WORKDIR=gs://jax_llm_data/dcformer_compare_experiments/logs/vit/m16_eval_models
+WORKDIR=gs://jax_llm_data/dcformer_compare_experiments/muddformer_logs/vit/
 gcloud compute tpus tpu-vm ssh $TPU_NAME --zone=$ZONE --worker=all --command="cd projects;sudo rm -r big_vision; git clone https://github.com/Lisennlp/big_vision.git"
 gcloud compute tpus tpu-vm ssh $TPU_NAME --zone=$ZONE --worker=all --command="cd projects/big_vision/big_vision/; /home/xxx/miniconda3/bin/pip  install -r requirements_lsp.txt"
 
 # config.only_eval=False when train mode, ohterwise, set config.only_eval=True
-FLAGS="--config.total_epochs=300  --config.ckpt_steps=5000 --config.resume=$WORKDIR/checkpoint.bv-000090000-tmp/ --config.only_eval=True"
+FLAGS="--config.total_epochs=300  --config.ckpt_steps=5000  --config.only_eval=False"
 gcloud compute tpus tpu-vm ssh $TPU_NAME --zone=$ZONE --worker=all --command "killall main.py; sudo lsof -w /dev/accel0 |cut -c 9-14|awk 'NR>1 {print $1}'| xargs sudo kill -9; sudo rm -f /tmp/libtpu_lockfile;sudo chmod +777 -R /tmp/tpu_logs/; export TFDS_DATA_DIR=gs://jax_llm_data/dcformer_compare_experiments/vit; cd projects/big_vision/; /home/xxx/miniconda3/bin/python  -m big_vision.train --config $CODEDIR/big_vision/configs/$CONFIG  $FLAGS --workdir $WORKDIR"
 ```
 

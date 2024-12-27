@@ -943,7 +943,7 @@ def tsload(path, *, tree=None, shardings=None, regex=None):
     shardings = jax.sharding.SingleDeviceSharding(
         jax.local_devices(backend="cpu")[0]
     )
-  shardings = list(jax.tree_leaves(tree_broadcast(shardings, tree)))
+  shardings = list(jax.tree_util.tree_leaves(tree_broadcast(shardings, tree)))
 
   names_to_load = [os.path.join(path, name.replace("/", "~"))
                    for name in names_to_load]

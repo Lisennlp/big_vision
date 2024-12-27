@@ -610,20 +610,12 @@ def _convert_to_activation_function(fn_or_string: Union[str, Callable[..., Any]]
 def nd_dense_init(scale, mode, distribution):  # XD: from maxtext.initializers
   """Initializer with in_axis, out_axis set at call time."""
 
-  def init_fn(key, shape, dtype, in_axis, out_axis):
+  def init_fn(key, shape, dtype, in_axis=0, out_axis=1): # lsp
     fn = jax.nn.initializers.variance_scaling(scale, mode, distribution, in_axis, out_axis)
     return fn(key, shape, dtype)
 
   return init_fn
 
-dc_config = dict(  # XD: for MUDDFormer
-  dynamic_dense_type = 'qkvm',
-  dynamic_dense_fix_last_layer = True,
-  dynamic_dense_hidden_expand = 1,
-  dynamic_dense_hidden_round = True,
-  dynamic_dense_act_cls = 'gelu',
-  num_decoder_layers = xx,
-)
 
 class Encoder1DBlock(nn.Module):
   """Single transformer encoder block (MHSA + MLP)."""
@@ -632,24 +624,27 @@ class Encoder1DBlock(nn.Module):
   dropout: float = 0.0
   dtype_mm: str = "float32"
   dc_config: dict = None
-
+  param_dtype: str = "float32"
+  precision: PrecisionLike = None
+  num_decoder_layers: int = None
+  
   def setup(self) -> None:  # XD
     cfg = self.dc_config or {}
     if not cfg.get('dynamic_dense_type'): return
     
     factor = 1
     i = int(self.name.split('_')[-1])  # name=f"layers_{i}"
-    C = 1 if cfg['dynamic_dense_fix_last_layer'] and i == cfg['num_decoder_layers']-1 else len(cfg['dynamic_dense_type'])
-    dw_shape = (C, ((i + 1) * factor + 1))
+    C = 1 if cfg['dynamic_dense_fix_last_layer'] and i == num_decoder_layers - 1 else len(cfg['dynamic_dense_type'])
+    dw_shape = (C, ((i + 1) * factor + 1)) # 加词向量那一层。因此最后总层数+1
     dynamic_dense_inter_dim = int(math.prod(dw_shape) * cfg['dynamic_dense_hidden_expand'])
-    if cfg['dynamic_dense_fix_last_layer'] and i == cfg['num_decoder_layers']-1:
+    if cfg['dynamic_dense_fix_last_layer'] and i == num_decoder_layers - 1:
       dynamic_dense_inter_dim *= len(cfg['dynamic_dense_type'])
     if cfg['dynamic_dense_hidden_round']:  # default: round to 64 or 128
       # assert dynamic_dense_inter_dim < 128
       dynamic_dense_inter_dim = (dynamic_dense_inter_dim// 64 +1) * 64
 
     kwargs = dict(
-      dtype=self.dtype,
+      dtype=self.dtype_mm,
       param_dtype=self.param_dtype,
       precision=self.precision,
     )
@@ -660,7 +655,12 @@ class Encoder1DBlock(nn.Module):
       **kwargs
     )
     self.dense_activation = _convert_to_activation_function(cfg['dynamic_dense_act_cls'])
-    init_v = [0] * ((i + 1) * factor) + [1]  # dense_bias_init_method == 'current_only'
+    init_v = jnp.array([0] * ((i + 1) * factor) + [1]) # dense_bias_init_method == 'current_only'
+    # init_v = jnp.broadcast_to(init_v, shape=(C, len(init_v))).reshape(-1)
+    init_v = init_v.repeat(C)
+    print(f'C: {C} init_v: {init_v.shape}')
+    print(f'dw_shape: {dw_shape}')
+
     self.dense_proj2 = DenseGeneral(
       dw_shape, kernel_init=nn.initializers.constant(0),
       # kernel_axes=('kv', None), name='dynamic_dense_conn2',
@@ -672,13 +672,12 @@ class Encoder1DBlock(nn.Module):
   def __call__(self, x, deterministic=True):
     cfg = self.dc_config or {}
     out = {}
-
     if cfg.get('dynamic_dense_type') is not None: # XD
-      assert cfg.get['dynamic_dense_type'] == 'qkvm', cfg.get['dynamic_dense_type']
+      assert cfg.get('dynamic_dense_type') == 'qkvm', cfg.get('dynamic_dense_type')
       assert isinstance(x, (tuple, list)) and len(x) == 4
       x = [nn.with_logical_constraint(i, ("act_batch", "act_len", "act_emb")) for i in x]
       inputs = [nn.LayerNorm(name='_'.join(["pre_sa_ln", name_suffix]))(inp) for inp, name_suffix in zip(x[:3], 'qkv')]
-      x = x[-1]  # 'm'
+      x = x[-1]  # 'm'   lsp: m表示残差
     else:
       x = nn.with_logical_constraint(x, ("act_batch", "act_len", "act_emb"))
       inputs = [nn.LayerNorm()(x)]
@@ -689,10 +688,10 @@ class Encoder1DBlock(nn.Module):
     y = out['sa'] = MultiHeadDotProductAttention(
         num_heads=self.num_heads,
         dtype=self.dtype_mm,
-        qkv_features=y.shape[-1],
+        qkv_features=x.shape[-1],
         kernel_init=nn.initializers.xavier_uniform(),
         deterministic=deterministic,
-        **cfg
+        dynamic_compose=cfg.dynamic_compose
     )(*inputs)  # XD
 
     # y = out["sa"] = nn.MultiHeadDotProductAttention(
@@ -717,7 +716,7 @@ class Encoder1DBlock(nn.Module):
     x = nn.with_logical_constraint(x, ("act_batch", "act_len", "act_emb"))
     
     if cfg.get('dynamic_dense_type') is not None: # XD
-      dense_w_inner = self.dense_activation(self.dense_proj1(nn.RMSNorm(x)))
+      dense_w_inner = self.dense_activation(self.dense_proj1(nn.RMSNorm()(x)))
       out["dyn_dense_w"] = self.dense_proj2(dense_w_inner)
     return x, out
 
@@ -746,10 +745,10 @@ class Encoder(nn.Module):
 
   @nn.compact
   def __call__(self, x, deterministic=True):
+    print(f'dc_config222: {self.dc_config}')
     cfg = self.dc_config or {}
     if cfg.get('dynamic_dense_type'): x, hids = [x] * len(cfg['dynamic_dense_type']), [x]  # XD
     out = {}
-
     if self.scan:
       block = nn.remat(
           Encoder1DBlock,
@@ -775,21 +774,22 @@ class Encoder(nn.Module):
             dtype_mm=self.dtype_mm,
             mlp_dim=self.mlp_dim, num_heads=self.num_heads,
             dc_config=self.dc_config,
-            dropout=self.dropout)
+            dropout=self.dropout,
+            num_decoder_layers=self.depth)
         x, out[f"block{lyr:02d}"] = block_cur(x, deterministic)
-
         if cfg.get('dynamic_dense_type'):  # XD
           i = lyr  # to be compatible with pax code
-          x, dyn_dense_w = x  # unpack tuple
+          # x, dyn_dense_w = x  # unpack tuple  # dyn_dense_w: 历史层的qkvm权重
+          dyn_dense_w = out[f"block{lyr:02d}"]['dyn_dense_w']
           hids.append(x)
-          C = 1 if cfg['dynamic_dense_fix_last_layer'] and i==cfg['num_decoder_layers']-1 else len(cfg['dynamic_dense_type'])
+          C = 1 if cfg['dynamic_dense_fix_last_layer'] and i == self.depth - 1 else len(cfg['dynamic_dense_type'])
           dyn_dense_w = rearrange(dyn_dense_w, 'B T C L -> C B T L 1', C=C)
           # dense_w = jnp.asarray(getattr(self, f'dense_conn_{i}'), self.dtype)
           # dyn_dense_w = dyn_dense_w + dense_w[:, None, None, :, None]  # dynamic + static; CBTL1 + C11L1 -> CBTL1
           factor = 1
           hid_idxs = list(range((i+1) * factor + 1)) # L+1
           x = tuple([sum([dyn_dense_w[cidx,:,:,j] * hids[j] for j in hid_idxs]) for cidx in range(C)])
-      if cfg.get('dynamic_dense_type'): x = x[0] # XD
+      if cfg.get('dynamic_dense_type'): x = x[0] # XD # 最后一层C=1，因此只有m
       out["pre_ln"] = x  # Alias for last block, but without the number in it.
 
     return nn.LayerNorm(name="encoder_norm")(x), out
@@ -926,7 +926,7 @@ def decode_variant(variant):
     return {}
 
   v, patch = variant, {}
-  if "/" in variant:
+  if "/" in variant:  # variant: such as S/16
     v, patch = variant.split("/")
     patch = {"patch_size": (int(patch), int(patch))}
 

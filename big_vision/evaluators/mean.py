@@ -43,7 +43,7 @@ def _run_predict_fn(predict_fn, train_state, batch):
   metrics = predict_fn(train_state, batch)
   # Sanity check output format of predict_fn.
   assert isinstance(metrics, Mapping), 'predict_fn must return a dict'
-  for y in jax.tree_leaves(metrics):
+  for y in jax.tree_util.tree_leaves(metrics):
     if y.shape != mask.shape:
       raise ValueError(
           f'Expected per-example metrics of shape {mask.shape} found '

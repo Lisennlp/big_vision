@@ -167,7 +167,7 @@ def main(argv):
                                 "state": rng_init_state})
 
   if jax.process_index() == 0:
-    num_params = sum(p.size for p in jax.tree_leaves(params_cpu))
+    num_params = sum(p.size for p in jax.tree_util.tree_leaves(params_cpu))
     parameter_overview.log_parameter_overview(params_cpu, msg="init params")
     mw.measure("num_params", num_params)
 
@@ -220,11 +220,11 @@ def main(argv):
     state = aux.pop("state")
     measurements = {**measurements, **aux}
 
-    gs = jax.tree_leaves(bv_optax.replace_frozen(config.schedule, grads, 0.))
+    gs = jax.tree_util.tree_leaves(bv_optax.replace_frozen(config.schedule, grads, 0.))
     measurements["l2_grads"] = jnp.sqrt(sum([jnp.vdot(g, g) for g in gs]))
-    ps = jax.tree_leaves(params)
+    ps = jax.tree_util.tree_leaves(params)
     measurements["l2_params"] = jnp.sqrt(sum([jnp.vdot(p, p) for p in ps]))
-    us = jax.tree_leaves(updates)
+    us = jax.tree_util.tree_leaves(updates)
     measurements["l2_updates"] = jnp.sqrt(sum([jnp.vdot(u, u) for u in us]))
 
     return params, opt, state, l, rng, measurements

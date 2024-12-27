@@ -195,7 +195,7 @@ def main(argv):
   sched_fns_cpu = [u.jit_cpu()(sched_fn) for sched_fn in sched_fns]
 
   if jax.process_index() == 0:
-    num_params = sum(np.prod(p.shape) for p in jax.tree_leaves(params_shape))
+    num_params = sum(np.prod(p.shape) for p in jax.tree_util.tree_leaves(params_shape))
     mw.measure("num_params", num_params)
 
 ################################################################################
@@ -296,11 +296,11 @@ def main(argv):
     params = optax.apply_updates(params, updates)
 
     measurements = {"training_loss": loss}
-    gs = jax.tree_leaves(bv_optax.replace_frozen(config.schedule, grads, 0.))
+    gs = jax.tree_util.tree_leaves(bv_optax.replace_frozen(config.schedule, grads, 0.))
     measurements["l2_grads"] = jnp.sqrt(sum([jnp.sum(g * g) for g in gs]))
-    ps = jax.tree_leaves(params)
+    ps = jax.tree_util.tree_leaves(params)
     measurements["l2_params"] = jnp.sqrt(sum([jnp.sum(p * p) for p in ps]))
-    us = jax.tree_leaves(updates)
+    us = jax.tree_util.tree_leaves(updates)
     measurements["l2_updates"] = jnp.sqrt(sum([jnp.sum(u * u) for u in us]))
 
     return {"params": params, "opt": opt, "rng": rng}, measurements

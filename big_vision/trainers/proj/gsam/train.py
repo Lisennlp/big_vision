@@ -212,7 +212,7 @@ def main(argv):
     updates, opt = tx.update(grads, opt, params)
     params = optax.apply_updates(params, updates)
 
-    gs = jax.tree_leaves(bv_optax.replace_frozen(config.schedule, grads, 0.))
+    gs = jax.tree_util.tree_leaves(bv_optax.replace_frozen(config.schedule, grads, 0.))
     measurements["l2_grads"] = jnp.sqrt(sum(jnp.vdot(g, g) for g in gs))
     ps = jax.tree_util.tree_leaves(params)
     measurements["l2_params"] = jnp.sqrt(sum(jnp.vdot(p, p) for p in ps))

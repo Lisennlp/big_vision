@@ -188,7 +188,7 @@ class OptaxTest(parameterized.TestCase):
     opt_state = tx.init(params)
 
     grads = jax.tree_map(jnp.ones_like, params)
-    gflat = jax.tree_leaves(grads)
+    gflat = jax.tree_util.tree_leaves(grads)
     l2_g = jnp.sqrt(sum([jnp.vdot(p, p) for p in gflat]))
     grad_clip_factor = jnp.minimum(1.0, config.grad_clip_norm / l2_g)
     grads_scaled = jax.tree_map(lambda p: grad_clip_factor * p, grads)

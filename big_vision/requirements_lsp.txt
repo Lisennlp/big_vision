@@ -1,6 +1,12 @@
+# clu: 0.0.12
 git+https://github.com/google/CommonLoopUtils
+# 0.8.8
 git+https://github.com/google/flaxformer
+# 0.1
 git+https://github.com/akolesnikoff/panopticapi.git@mute
 tensorflow-addons
 -f https://storage.googleapis.com/jax-releases/libtpu_releases.html
-jax[tpu]==0.4.23
+jax[tpu]==0.4.34
+keras<3.0.0
+mediapipe-model-maker==0.2.1.4
+overrides==7.7.0

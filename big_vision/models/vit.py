@@ -634,10 +634,10 @@ class Encoder1DBlock(nn.Module):
     
     factor = 1
     i = int(self.name.split('_')[-1])  # name=f"layers_{i}"
-    C = 1 if cfg['dynamic_dense_fix_last_layer'] and i == num_decoder_layers - 1 else len(cfg['dynamic_dense_type'])
+    C = 1 if cfg['dynamic_dense_fix_last_layer'] and i == self.num_decoder_layers - 1 else len(cfg['dynamic_dense_type'])
     dw_shape = (C, ((i + 1) * factor + 1)) # 加词向量那一层。因此最后总层数+1
     dynamic_dense_inter_dim = int(math.prod(dw_shape) * cfg['dynamic_dense_hidden_expand'])
-    if cfg['dynamic_dense_fix_last_layer'] and i == num_decoder_layers - 1:
+    if cfg['dynamic_dense_fix_last_layer'] and i == self.num_decoder_layers - 1:
       dynamic_dense_inter_dim *= len(cfg['dynamic_dense_type'])
     if cfg['dynamic_dense_hidden_round']:  # default: round to 64 or 128
       # assert dynamic_dense_inter_dim < 128

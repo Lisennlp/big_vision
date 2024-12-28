@@ -96,7 +96,6 @@ def get_config():
     dynamic_dense_hidden_expand = 1,
     dynamic_dense_hidden_round = True,
     dynamic_dense_act_cls = 'gelu',
-    num_decoder_layers = 12,
   )
 
   config.resume = ''

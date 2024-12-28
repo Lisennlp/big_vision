@@ -70,6 +70,7 @@ def get_config():
       pool_type='gap',
       posemb='sincos2d',
   )
+  config.save_checkpoint = False
 
   # Optimizer section
   config.grad_clip_norm = 1.0

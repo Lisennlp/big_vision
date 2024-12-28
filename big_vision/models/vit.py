@@ -685,21 +685,21 @@ class Encoder1DBlock(nn.Module):
     # x = nn.with_logical_constraint(x, ("act_batch", "act_len", "act_emb"))
     # y = nn.LayerNorm()(x)
 
-    y = out['sa'] = MultiHeadDotProductAttention(
-        num_heads=self.num_heads,
-        dtype=self.dtype_mm,
-        qkv_features=x.shape[-1],
-        kernel_init=nn.initializers.xavier_uniform(),
-        deterministic=deterministic,
-        dynamic_compose=cfg.dynamic_compose
-    )(*inputs)  # XD
-
-    # y = out["sa"] = nn.MultiHeadDotProductAttention(
+    # y = out['sa'] = MultiHeadDotProductAttention(
     #     num_heads=self.num_heads,
+    #     dtype=self.dtype_mm,
+    #     qkv_features=x.shape[-1],
     #     kernel_init=nn.initializers.xavier_uniform(),
     #     deterministic=deterministic,
-    #     dtype=self.dtype_mm,
-    # )(y, y)
+    #     dynamic_compose=cfg.dynamic_compose
+    # )(*inputs)  # XD
+
+    y = out["sa"] = nn.MultiHeadDotProductAttention(
+        num_heads=self.num_heads,
+        kernel_init=nn.initializers.xavier_uniform(),
+        deterministic=deterministic,
+        dtype=self.dtype_mm,
+    )(*inputs)
 
     y = nn.with_logical_constraint(y, ("act_batch", "act_len", "act_emb"))
     y = nn.Dropout(rate=self.dropout)(y, deterministic)
@@ -717,7 +717,7 @@ class Encoder1DBlock(nn.Module):
     
     if cfg.get('dynamic_dense_type') is not None: # XD
       dense_w_inner = self.dense_activation(self.dense_proj1(nn.RMSNorm()(x)))
-      out["dyn_dense_w"] = self.dense_proj2(dense_w_inner)
+      out["dyn_dense_w"] = self.dense_proj2(dense_w_inner*0.0)
     return x, out
 
 

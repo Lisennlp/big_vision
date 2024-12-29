@@ -59,7 +59,7 @@ def get_config():
   )
   pp_eval = 'decode|resize_small(256)|central_crop(224)' + pp_common
 
-  config.log_training_steps = 50
+  config.log_training_steps = 10
   config.ckpt_steps = 1000
 
   # Model section
@@ -96,13 +96,14 @@ def get_config():
     dynamic_dense_hidden_expand = 1,
     dynamic_dense_hidden_round = False, # True -> false
     dynamic_dense_act_cls = 'gelu',
-    static = False,
+    static = True,
     dense_proj1_init_scale = 0.1
   )
 
   config.resume = ''
   config.only_eval = False
   config.topk = 10
+  config.save_checkpoint = True
 
   # Eval section
   def get_eval(split, dataset='imagenet2012'):

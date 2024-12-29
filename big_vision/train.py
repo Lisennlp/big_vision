@@ -117,7 +117,7 @@ def main(argv):
   # Set up work directory and print welcome message.
   config = flags.FLAGS.config
   workdir = flags.FLAGS.workdir
-  save_checkpoint = flags.FLAGS.save_checkpoint
+  # save_checkpoint = flags.FLAGS.save_checkpoint
 
   logging.info(
       f"\u001b[33mHello from process {jax.process_index()} holding "
@@ -362,6 +362,7 @@ def main(argv):
     resume_ckpt_path = save_ckpt_path
   else:
     resume_ckpt_path = None
+  save_checkpoint = config.get('save_checkpoint', False)
   logging.info(f'save_checkpoint: {save_checkpoint}')
   ckpt_mngr = None
   if (save_ckpt_path or resume_ckpt_path) and save_checkpoint:
@@ -448,9 +449,12 @@ def main(argv):
   log_writer = initialize_summary_writer(tensorboard_dir)
 
   if jax.process_index() == 0:
-    log_writer.add_text('model_size', num_params)
-    for key, value in config.items(): 
-      log_writer.add_text(key, value)
+    try:
+      log_writer.add_text('model_size', str(num_params))
+      for key, value in config.items(): 
+        log_writer.add_text(key, str(value))
+    except:
+      logging.info(f'write add text failed!!!')
 
   ## lsp: process为0的上传数据到workdir，其余的机器仅仅logging
   # writer = metric_writers.create_default_writer(
@@ -499,7 +503,7 @@ def main(argv):
 
   keep_steps = config.get('keep_steps', list(range(10000, 400000, 10000)))
   logging.info(f'keep_steps: {keep_steps}')
-  with metric_writers.ensure_flushes(writer):
+  with metric_writers.ensure_flushes(log_writer):
     prof = None  # Keeps track of start/stop of profiler state.
     write_note("Starting training loop, compiling the first step...")
     for step, batch in zip(range(first_step + 1, total_steps + 1), train_iter):
@@ -514,7 +518,7 @@ def main(argv):
       if jax.process_index() == 0:
         prof = u.startstop_prof(prof, step, first_step, get_steps("log_training"))
 
-      # Report training progress
+      # Report training progress # every log_training print
       if (u.itstime(step, get_steps("log_training"), total_steps, host=0)
           or u.chrono.warmup and jax.process_index() == 0):
 
@@ -523,16 +527,13 @@ def main(argv):
           # mw.measure(f"global_schedule{i if i else ''}", step_ratio)
         measurements = jax.device_get(measurements)
         # keys = measurements.keys()
-        if step % 10 == 0:
-          logging.info(f'[{step}] train loss: {measurements["training_loss"]:.4f}')
+        logging.info(f'[{step}] train loss: {measurements["training_loss"]:.4f}')
         # lsp
         real_lr = step_ratio * u.put_cpu(config.lr)
-        if jax.process_index() == 0:
-          log_writer.add_scalar('learning_rate', real_lr, step)
-          for name, value in measurements.items():
-            log_writer.add_scalar(name, value, step)
-          if step % 10 == 0:
-            log_writer.flush()
+        log_writer.add_scalar('learning_rate', real_lr, step)
+        for name, value in measurements.items():
+          log_writer.add_scalar(name, value, step)
+        log_writer.flush()
             
         # u.chrono.tick(step)
         if not np.isfinite(measurements["training_loss"]):
@@ -560,8 +561,7 @@ def main(argv):
         logging.info(f'\n\n[lsp]Start to save: {step} model to ‘{save_ckpt_path}’ \nkeep: {keep}\n\n')
         if ckpt_mngr is not None:
           u.save_checkpoint_ts(ckpt_mngr, ckpt, save_ckpt_path, step, keep, keep_steps=keep_steps)
-          if jax.process_index() == 0:
-            log_writer.close()
+          
 
         u.chrono.resume()
 
@@ -587,6 +587,8 @@ def main(argv):
 
     # Last note needs to happen before the pool's closed =)
     write_note(f"Done!\n{u.chrono.note}")
+    if jax.process_index() == 0:
+        log_writer.close()
 
     # pool.close()
     # pool.join()

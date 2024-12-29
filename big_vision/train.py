@@ -50,6 +50,7 @@ import tensorflow as tf
 
 from tensorflow.io import gfile
 from flax.traverse_util import flatten_dict, unflatten_dict
+from tensorboardX import writer
 
 
 
@@ -59,6 +60,8 @@ config_flags.DEFINE_config_file(
 flags.DEFINE_string("workdir", default=None, help="Work unit directory.")
 flags.DEFINE_boolean("cleanup", default=False,
                      help="Delete workdir (only) after successful completion.")
+flags.DEFINE_boolean("save_checkpoint", default=False,
+                     help="whether to save checkpoint")
 
 # Adds jax flags to the program.
 jax.config.parse_flags_with_absl()
@@ -84,6 +87,13 @@ def compute_params_norm(params):
       return scalar_vales
 
 
+def initialize_summary_writer(tensorboard_dir):
+  return (
+      writer.SummaryWriter(tensorboard_dir)
+      if jax.process_index() == 0
+      else None
+  )
+
 def main(argv):
   del argv
 
@@ -106,6 +116,8 @@ def main(argv):
   # Set up work directory and print welcome message.
   config = flags.FLAGS.config
   workdir = flags.FLAGS.workdir
+  save_checkpoint = flags.FLAGS.save_checkpoint
+
   logging.info(
       f"\u001b[33mHello from process {jax.process_index()} holding "
       f"{jax.local_device_count()}/{jax.device_count()} devices and "
@@ -302,7 +314,7 @@ def main(argv):
                               mutable="intermediates",)
       flatten_intermediates = flatten_dict(intermediates)
       for k, v in flatten_intermediates.items():
-        logging.info(k, v[0].shape)
+        logging.info(f'{k}: {v[0].shape}')
       flatten_intermediates = {k: jnp.mean(v[0]) for k, v in flatten_intermediates.items()}
       loss = getattr(u, config.get("loss", "sigmoid_xent"))(logits=logits, labels=labels)
       return loss, flatten_intermediates
@@ -343,13 +355,16 @@ def main(argv):
   # 3. Initialize model from something, e,g, start a fine-tuning job.
   # 4. Train from scratch.
   resume_ckpt_path = None
-  if save_ckpt_path and gfile.exists(f"{save_ckpt_path}-LAST"):
-    resume_ckpt_path = save_ckpt_path
-  elif config.get("resume"):
+  
+  if config.get("resume"):
     resume_ckpt_path = fillin(config.resume)
+  else:
+    assert save_ckpt_path and gfile.exists(f"{save_ckpt_path}-LAST")
+    resume_ckpt_path = save_ckpt_path
 
+  logging.info(f'save_checkpoint: {save_checkpoint}')
   ckpt_mngr = None
-  if (save_ckpt_path or resume_ckpt_path)  and config.save_checkpoint:
+  if (save_ckpt_path or resume_ckpt_path) and save_checkpoint:
   #   # lsp： error， 需要jax>=0.4.23
     ckpt_mngr = array_serial.GlobalAsyncCheckpointManager()
 
@@ -427,12 +442,14 @@ def main(argv):
   first_step = int(jax.device_get(first_step_device))
   u.chrono.inform(first_step=first_step)
 
-  # process为0的上传数据到workdir，其余的机器仅仅logging
-  tensorboard_dir = os.path.join(workdir, 'tensorboard')
-  writer = metric_writers.create_default_writer(
-      workdir, just_logging=jax.process_index() > 0
-  )
-
+  basename = os.path.basename(workdir.rstrip('/'))
+  tensorboard_dir = os.path.join('gs://jax_llm_data_europe-west4/dcformer_compare_experiments/muddformer_logs/vit/tensorboards', basename)
+  logging.info(f'tensorboard_dir: {tensorboard_dir}')
+  log_writer = initialize_summary_writer(tensorboard_dir)
+  ## lsp: process为0的上传数据到workdir，其余的机器仅仅logging
+  # writer = metric_writers.create_default_writer(
+  #     tensorboard_dir, just_logging=False
+  # )
   # Note that training can be pre-empted during the final evaluation (i.e.
   # just after the final checkpoint has been written to disc), in which case we
   # want to run the evals.
@@ -458,8 +475,8 @@ def main(argv):
             new_value = jax.device_get(value)
             mw.measure(new_key, new_value)
             d = {new_key: new_value.item()}
-            writer.write_scalars(first_step,  d)
             if jax.process_index() == 0:
+              log_writer.add_scalar(new_key, new_value.item(), first_step)
               eval_writer.write(f'{json.dumps(d, ensure_ascii=False)}\n')
               # json.dump(d, eval_writer)
       if jax.process_index() == 0:
@@ -491,24 +508,27 @@ def main(argv):
       if jax.process_index() == 0:
         prof = u.startstop_prof(prof, step, first_step, get_steps("log_training"))
 
-      # logging.info(f'measurements: {measurements}')
-
       # Report training progress
       if (u.itstime(step, get_steps("log_training"), total_steps, host=0)
           or u.chrono.warmup and jax.process_index() == 0):
+
         for i, sched_fn_cpu in enumerate(sched_fns_cpu): # len(sched_fns_cpu) == 1
           step_ratio = sched_fn_cpu(u.put_cpu(step - 1))
-          mw.measure(f"global_schedule{i if i else ''}", step_ratio)
+          # mw.measure(f"global_schedule{i if i else ''}", step_ratio)
+        measurements = jax.device_get(measurements)
+        # keys = measurements.keys()
         # lsp
         real_lr = step_ratio * u.put_cpu(config.lr)
-        writer.write_scalars(step, {f'learning_rate': real_lr})
+        if jax.process_index() == 0:
+          log_writer.add_scalar('learning_rate', real_lr, step)
+          for name, value in measurements.items():
+            log_writer.add_scalar(name, value, step)
 
-        measurements = jax.device_get(measurements)
-        for name, value in measurements.items():
-          # if 'Transformer' not in name:
-            # mw.measure(name, value)
-          writer.write_scalars(step, {f'{name}': value})
-        u.chrono.tick(step)
+          if step % 10 == 0:
+            logging.info(f'[{step}] train loss: {measurements["training_loss"]:.4f}')
+            log_writer.flush()
+            
+        # u.chrono.tick(step)
         if not np.isfinite(measurements["training_loss"]):
           raise RuntimeError(f"The loss became nan or inf somewhere within steps "
                             f"[{step - get_steps('log_training')}, {step}]")
@@ -534,6 +554,9 @@ def main(argv):
         logging.info(f'\n\n[lsp]Start to save: {step} model to ‘{save_ckpt_path}’ \nkeep: {keep}\n\n')
         if ckpt_mngr is not None:
           u.save_checkpoint_ts(ckpt_mngr, ckpt, save_ckpt_path, step, keep, keep_steps=keep_steps)
+          if jax.process_index() == 0:
+            log_writer.close()
+
         u.chrono.resume()
 
       for (name, evaluator, log_steps, prefix) in evaluators():
@@ -545,7 +568,8 @@ def main(argv):
             with mesh, nn.logical_axis_rules([("act_batch", "data")]):
               for key, value in evaluator.run(train_state):
                 mw.measure(f"{prefix}{key}", jax.device_get(value))
-                writer.write_scalars(step, {f'{prefix}{key}': jax.device_get(value)})
+                if jax.process_index() == 0:
+                  log_writer.add_scalar(f'{prefix}{key}', jax.device_get(value), step)
 
           u.chrono.resume()
       mw.step_end()

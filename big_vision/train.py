@@ -448,6 +448,7 @@ def main(argv):
   log_writer = initialize_summary_writer(tensorboard_dir)
 
   if jax.process_index() == 0:
+    log_writer.add_text('model_size', num_params)
     for key, value in config.items(): 
       log_writer.add_text(key, value)
 

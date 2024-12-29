@@ -102,8 +102,6 @@ def get_config():
   config.only_eval = False
   config.topk = 10
 
-  config.save_checkpoint = True
-
   # Eval section
   def get_eval(split, dataset='imagenet2012'):
     return dict(

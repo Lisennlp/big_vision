@@ -491,7 +491,7 @@ def main(argv):
 #                                                                              #
 ################################################################################
 
-  keep_steps = config.get('keep_steps', list(range(5000, 400000, 5000)))
+  keep_steps = config.get('keep_steps', list(range(10000, 400000, 10000)))
   logging.info(f'keep_steps: {keep_steps}')
   with metric_writers.ensure_flushes(writer):
     prof = None  # Keeps track of start/stop of profiler state.

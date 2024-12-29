@@ -480,6 +480,8 @@ class MultiHeadDotProductAttention(nn.Module):
     # key = key.reshape(bsz, length, self.num_heads, self.head_dim)
     # value = value.reshape(bsz, length, self.num_heads, self.head_dim)
 
+    print(f'normalize_qk: {self.normalize_qk}')
+
     if self.normalize_qk:
     # if self.dynamic_compose:  # XD
       # Normalizing query and key projections stabilizes training with higher
@@ -649,7 +651,7 @@ class Encoder1DBlock(nn.Module):
       precision=self.precision,
     )
     self.dense_proj1 = DenseGeneral(
-      dynamic_dense_inter_dim, kernel_init=nd_dense_init(0.1, "fan_in", "normal"),  # scale 1.0 -> 0.1
+      dynamic_dense_inter_dim, kernel_init=nd_dense_init(1.0, "fan_in", "normal"),  # scale 1.0 -> 0.1
       # kernel_axes=('embed', 'kv'), name='dynamic_dense_conn1',
       use_bias=False,
       **kwargs

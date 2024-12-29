@@ -255,7 +255,7 @@ class MultiHeadDotProductAttention(nn.Module):
   ] = nn.zeros_init()
   use_bias: bool = True
   decode: bool = False
-  # normalize_qk: bool = False
+  normalize_qk: bool = False
   dynamic_compose: bool = True  # XD
   is_cross_attention: bool = False  # XD
   dynamic_dropout_rate: float = None
@@ -480,8 +480,8 @@ class MultiHeadDotProductAttention(nn.Module):
     # key = key.reshape(bsz, length, self.num_heads, self.head_dim)
     # value = value.reshape(bsz, length, self.num_heads, self.head_dim)
 
-    # if self.normalize_qk:
-    if self.dynamic_compose:  # XD
+    if self.normalize_qk:
+    # if self.dynamic_compose:  # XD
       # Normalizing query and key projections stabilizes training with higher
       # LR. See ViT-22B paper http://arxiv.org/abs/2302.05442 for analysis.
       query = LayerNorm(name='query_ln', use_bias=False)(query)  # type: ignore[call-arg]
@@ -649,7 +649,7 @@ class Encoder1DBlock(nn.Module):
       precision=self.precision,
     )
     self.dense_proj1 = DenseGeneral(
-      dynamic_dense_inter_dim, kernel_init=nd_dense_init(1.0, "fan_in", "normal"),  # scale 1.0 -> 0.1
+      dynamic_dense_inter_dim, kernel_init=nd_dense_init(0.1, "fan_in", "normal"),  # scale 1.0 -> 0.1
       # kernel_axes=('embed', 'kv'), name='dynamic_dense_conn1',
       use_bias=False,
       **kwargs
@@ -695,21 +695,22 @@ class Encoder1DBlock(nn.Module):
     # x = nn.with_logical_constraint(x, ("act_batch", "act_len", "act_emb"))
     # y = nn.LayerNorm()(x)
 
-    # y = out['sa'] = MultiHeadDotProductAttention(
-    #     num_heads=self.num_heads,
-    #     dtype=self.dtype_mm,
-    #     qkv_features=x.shape[-1],
-    #     kernel_init=nn.initializers.xavier_uniform(),
-    #     deterministic=deterministic,
-    #     dynamic_compose=cfg.dynamic_compose
-    # )(*inputs)  # XD
-
-    y = out["sa"] = nn.MultiHeadDotProductAttention(
+    y = out['sa'] = MultiHeadDotProductAttention(
         num_heads=self.num_heads,
+        dtype=self.dtype_mm,
+        qkv_features=x.shape[-1],
         kernel_init=nn.initializers.xavier_uniform(),
         deterministic=deterministic,
-        dtype=self.dtype_mm,
-    )(*inputs)
+        dynamic_compose=cfg.get('dynamic_compose', False),
+        normalize_qk=cfg.get('normalize_qk', False),
+    )(*inputs)  # XD
+
+    # y = out["sa"] = nn.MultiHeadDotProductAttention(
+    #     num_heads=self.num_heads,
+    #     kernel_init=nn.initializers.xavier_uniform(),
+    #     deterministic=deterministic,
+    #     dtype=self.dtype_mm,
+    # )(*inputs)
 
     y = nn.with_logical_constraint(y, ("act_batch", "act_len", "act_emb"))
     y = nn.Dropout(rate=self.dropout)(y, deterministic)

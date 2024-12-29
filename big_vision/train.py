@@ -49,6 +49,8 @@ import optax
 import tensorflow as tf
 
 from tensorflow.io import gfile
+from flax.traverse_util import flatten_dict, unflatten_dict
+
 
 
 config_flags.DEFINE_config_file(
@@ -67,6 +69,19 @@ jax.config.parse_flags_with_absl()
 jax.config.update("jax_transfer_guard", "disallow")
 # Fixes design flaw in jax.random that may cause unnecessary d2d comms.
 jax.config.update("jax_threefry_partitionable", True)
+
+
+def compute_params_norm(params):
+      def param_norm(param):
+          return jnp.sqrt(jnp.sum(jnp.square(param)))
+      # 记录每个参数的norm
+      param_norms = jax.tree_util.tree_map(param_norm, params)
+      flat_param_norms = flatten_dict(param_norms)
+      scalar_vales = {}
+      for k, v in flat_param_norms.items():
+        newk = '/'.join(k)
+        scalar_vales[newk] = v
+      return scalar_vales
 
 
 def main(argv):
@@ -193,6 +208,7 @@ def main(argv):
   opt_shape = jax.eval_shape(tx.init, params_shape)
   # We jit this, such that the arrays are created on the CPU, not device[0].
   sched_fns_cpu = [u.jit_cpu()(sched_fn) for sched_fn in sched_fns]
+  logging.info(f'sched_fns_cpu: {sched_fns_cpu}')
 
   if jax.process_index() == 0:
     num_params = sum(np.prod(p.shape) for p in jax.tree_util.tree_leaves(params_shape))
@@ -279,14 +295,20 @@ def main(argv):
     rng, rng_model = jax.random.split(rng, 2)
 
     def loss_fn(params):
-      logits, _ = model.apply(
-          {"params": params}, images,
-          train=True, rngs={"dropout": rng_model})
-      return getattr(u, config.get("loss", "sigmoid_xent"))(
-          logits=logits, labels=labels)
+      (logits, _), intermediates = model.apply({"params": params}, 
+                              images,
+                              train=True, 
+                              rngs={"dropout": rng_model},
+                              mutable="intermediates",)
+      flatten_intermediates = flatten_dict(intermediates)
+      for k, v in flatten_intermediates.items():
+        logging.info(k, v[0].shape)
+      flatten_intermediates = {k: jnp.mean(v[0]) for k, v in flatten_intermediates.items()}
+      loss = getattr(u, config.get("loss", "sigmoid_xent"))(logits=logits, labels=labels)
+      return loss, flatten_intermediates
 
     params, opt = train_state["params"], train_state["opt"]
-    loss, grads = jax.value_and_grad(loss_fn)(params)
+    (loss, flatten_intermediates), grads = jax.value_and_grad(loss_fn, has_aux=True)(params)
     updates, opt = tx.update(grads, opt, params)
     params = optax.apply_updates(params, updates)
 
@@ -297,6 +319,15 @@ def main(argv):
     measurements["l2_params"] = jnp.sqrt(sum([jnp.sum(p * p) for p in ps]))
     us = jax.tree_util.tree_leaves(updates)
     measurements["l2_updates"] = jnp.sqrt(sum([jnp.sum(u * u) for u in us]))
+
+    # lsp params norm record
+    params_norm_dict = compute_params_norm(params)
+    measurements.update(params_norm_dict)
+    # sow activate record
+    for k, v in flatten_intermediates.items():
+        k = 'intermediates/' + '/'.join(k)
+        logging.info(k)
+        measurements[k] = v
 
     return {"params": params, "opt": opt, "rng": rng}, measurements
 
@@ -456,7 +487,6 @@ def main(argv):
           with mesh, nn.logical_axis_rules([("act_batch", "data")]):
             train_state, measurements = update_fn(train_state, batch)
 
-
       # On the first host, let's always profile a handful of early steps.
       if jax.process_index() == 0:
         prof = u.startstop_prof(prof, step, first_step, get_steps("log_training"))
@@ -466,12 +496,17 @@ def main(argv):
       # Report training progress
       if (u.itstime(step, get_steps("log_training"), total_steps, host=0)
           or u.chrono.warmup and jax.process_index() == 0):
-        for i, sched_fn_cpu in enumerate(sched_fns_cpu):
-          mw.measure(f"global_schedule{i if i else ''}",
-                    sched_fn_cpu(u.put_cpu(step - 1)))
+        for i, sched_fn_cpu in enumerate(sched_fns_cpu): # len(sched_fns_cpu) == 1
+          step_ratio = sched_fn_cpu(u.put_cpu(step - 1))
+          mw.measure(f"global_schedule{i if i else ''}", step_ratio)
+        # lsp
+        real_lr = step_ratio * u.put_cpu(config.lr)
+        writer.write_scalars(step, {f'learning_rate': real_lr})
+
         measurements = jax.device_get(measurements)
         for name, value in measurements.items():
-          mw.measure(name, value)
+          # if 'Transformer' not in name:
+            # mw.measure(name, value)
           writer.write_scalars(step, {f'{name}': value})
         u.chrono.tick(step)
         if not np.isfinite(measurements["training_loss"]):

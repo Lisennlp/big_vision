@@ -116,11 +116,11 @@ def make(config, params, *, sched_kw):
 
   # Combine gradient updates and learning rate schedules.
   return optax.chain(
-      grad_clip_norm_tx,
-      *opt_txs,
-      *lr_mult_txs,
-      *weight_decay_txs,
-      *schedule_txs,
+      grad_clip_norm_tx, # clip norm
+      *opt_txs,  # mask
+      *lr_mult_txs, # scale lr，即 * lr
+      *weight_decay_txs, # weight decay
+      *schedule_txs,  # 学习率schedule，这里不一样的地方是，出来的是一个step scale。实际的学习率需要再*lr
       optax.scale(-1.0)), schedule_fns
 
 

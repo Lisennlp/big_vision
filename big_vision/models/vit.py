@@ -649,7 +649,7 @@ class Encoder1DBlock(nn.Module):
       precision=self.precision,
     )
     self.dense_proj1 = DenseGeneral(
-      dynamic_dense_inter_dim, kernel_init=nd_dense_init(1.0, "fan_in", "normal"),
+      dynamic_dense_inter_dim, kernel_init=nd_dense_init(0.1, "fan_in", "normal"),  # scale 1.0 -> 0.1
       # kernel_axes=('embed', 'kv'), name='dynamic_dense_conn1',
       use_bias=False,
       **kwargs
@@ -657,9 +657,19 @@ class Encoder1DBlock(nn.Module):
     self.dense_activation = _convert_to_activation_function(cfg['dynamic_dense_act_cls'])
     init_v = jnp.array([0] * ((i + 1) * factor) + [1]) # dense_bias_init_method == 'current_only'
     # init_v = jnp.broadcast_to(init_v, shape=(C, len(init_v))).reshape(-1)
-    init_v = init_v.repeat(C)
+    init_v = init_v[None].repeat(C, 0).reshape(-1)
+    # init_v = init_v.repeat(C)
     print(f'C: {C} init_v: {init_v.shape}')
     print(f'dw_shape: {dw_shape}')
+
+    # kernel = jnp.zeros(dw_shape)
+    # bias = jnp.full(dw_shape[-1], self.init_v)
+
+    # # Manually set kernel and bias as constants
+    # self.dense_proj2_kernel = jax.lax.stop_gradient(kernel)
+    # self.dense_proj2_bias = jax.lax.stop_gradient(bias)
+    self.dense_proj2 = jnp.zeros((dynamic_dense_inter_dim, *dw_shape))
+
 
     self.dense_proj2 = DenseGeneral(
       dw_shape, kernel_init=nn.initializers.constant(0),
@@ -716,9 +726,14 @@ class Encoder1DBlock(nn.Module):
     x = nn.with_logical_constraint(x, ("act_batch", "act_len", "act_emb"))
     
     if cfg.get('dynamic_dense_type') is not None: # XD
-      dense_w_inner = self.dense_activation(self.dense_proj1(nn.RMSNorm()(x)))
-      out["dyn_dense_w"] = self.dense_proj2(dense_w_inner*0.0)
+      # lsp: use_scale -> False
+      dense_w_inner = self.dense_activation(self.dense_proj1(nn.RMSNorm(use_scale=False)(x)))
+      out["dyn_dense_w"] = self.dense_proj2(dense_w_inner)
     return x, out
+
+
+def l2norm(x):
+  return jnp.sqrt(jnp.sum(jnp.square(x)))
 
 
 class Encoder(nn.Module):
@@ -747,7 +762,8 @@ class Encoder(nn.Module):
   def __call__(self, x, deterministic=True):
     print(f'dc_config222: {self.dc_config}')
     cfg = self.dc_config or {}
-    if cfg.get('dynamic_dense_type'): x, hids = [x] * len(cfg['dynamic_dense_type']), [x]  # XD
+    if cfg.get('dynamic_dense_type'): 
+      x, hids = [x] * len(cfg['dynamic_dense_type']), [x]  # XD
     out = {}
     if self.scan:
       block = nn.remat(
@@ -781,6 +797,15 @@ class Encoder(nn.Module):
           i = lyr  # to be compatible with pax code
           # x, dyn_dense_w = x  # unpack tuple  # dyn_dense_w: 历史层的qkvm权重
           dyn_dense_w = out[f"block{lyr:02d}"]['dyn_dense_w']
+
+          self.sow('intermediates', f'dyn_dense_w/max/layer_{lyr}', jnp.max(dyn_dense_w))
+          self.sow('intermediates', f'dyn_dense_w/mean/layer_{lyr}', jnp.mean(dyn_dense_w))
+          self.sow('intermediates', f'dyn_dense_w/min/layer_{lyr}', jnp.min(dyn_dense_w))
+          self.sow('intermediates', f'dyn_dense_w/norm/layer_{lyr}', l2norm(dyn_dense_w))
+          self.sow('intermediates', f'dyn_dense_w/std/layer_{lyr}', jnp.std(dyn_dense_w))
+
+          self.sow('intermediates', f'layer_output/norm/layer_{lyr}', l2norm(x))
+
           hids.append(x)
           C = 1 if cfg['dynamic_dense_fix_last_layer'] and i == self.depth - 1 else len(cfg['dynamic_dense_type'])
           dyn_dense_w = rearrange(dyn_dense_w, 'B T C L -> C B T L 1', C=C)
@@ -791,7 +816,7 @@ class Encoder(nn.Module):
           x = tuple([sum([dyn_dense_w[cidx,:,:,j] * hids[j] for j in hid_idxs]) for cidx in range(C)])
       if cfg.get('dynamic_dense_type'): x = x[0] # XD # 最后一层C=1，因此只有m
       out["pre_ln"] = x  # Alias for last block, but without the number in it.
-
+      # self.sow('intermediates', 'final_norm', l2norm(x))
     return nn.LayerNorm(name="encoder_norm")(x), out
 
 

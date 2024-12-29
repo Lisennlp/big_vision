@@ -45,7 +45,7 @@ def get_config():
       split='train[:99%]',
   )
   # lsp: * 4
-  config.input.batch_size = 1024 * 4
+  config.input.batch_size = 1024 * 1
   config.input.cache_raw = True  # Needs up to 120GB of RAM!
   config.input.shuffle_buffer_size = 250_000
 
@@ -83,14 +83,20 @@ def get_config():
   config.optax = dict(mu_dtype='bfloat16')
 
   config.lr = 0.001
-  # lsp: 0.0001 -> 0.05
+  # lsp: 0.0001 -> 0.05 -> 0.0001
   config.wd = 0.05
-  # lsp:10000 -> 1000
-  config.schedule = dict(warmup_steps=1000, decay_type='cosine')
-  # lsp: 0.2 -> 0.5
-  config.mixup = dict(p=0.5, fold_in=None)
+  # lsp:10000 -> 1000 -> 10000
+  config.schedule = dict(warmup_steps=10000, decay_type='cosine')
+  # lsp: 0.2 -> 0.5  -> 0.2
+  config.mixup = dict(p=0.2, fold_in=None)
 
   config.resume = None
+  config.save_checkpoint = True
+
+  config.resume = ''
+  config.only_eval = False
+  config.topk = 10
+
 
   # Eval section
   def get_eval(split, dataset='imagenet2012'):

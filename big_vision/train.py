@@ -354,14 +354,13 @@ def main(argv):
   # 2. Resume from a previous checkpoint, e.g. start a cooldown training job.
   # 3. Initialize model from something, e,g, start a fine-tuning job.
   # 4. Train from scratch.
-  resume_ckpt_path = None
   
   if config.get("resume"):
     resume_ckpt_path = fillin(config.resume)
-  else:
-    assert save_ckpt_path and gfile.exists(f"{save_ckpt_path}-LAST")
+  elif save_ckpt_path and gfile.exists(f"{save_ckpt_path}-LAST"):
     resume_ckpt_path = save_ckpt_path
-
+  else:
+    resume_ckpt_path = None
   logging.info(f'save_checkpoint: {save_checkpoint}')
   ckpt_mngr = None
   if (save_ckpt_path or resume_ckpt_path) and save_checkpoint:

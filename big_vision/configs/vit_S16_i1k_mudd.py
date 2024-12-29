@@ -78,7 +78,7 @@ def get_config():
   config.optax = dict(mu_dtype='bfloat16')
 
   config.lr = 0.001
-  config.wd = 0.1 # 0.0001 -> 0.1
+  config.wd = 0.0001 # 0.0001 -> 0.1
   config.schedule = dict(warmup_steps=10_000, decay_type='cosine')
 
   config.mixup = dict(p=0.2, fold_in=None)
@@ -96,6 +96,8 @@ def get_config():
     dynamic_dense_hidden_expand = 1,
     dynamic_dense_hidden_round = False, # True -> false
     dynamic_dense_act_cls = 'gelu',
+    static = True,
+    dense_proj1_init_scale = 1.0
   )
 
   config.resume = ''

@@ -104,7 +104,7 @@ class DynamicWeightProjection(nn.Module):
     if self.dynamic_w_init is not None:
       dynamic_hidden_dim = self.num_heads_per_group // self.dynamic_squeeze_ratio \
         if self.dynamic_squeeze_ratio is not None else 2
-      print(f'input_dim: {self.input_dim} dynamic_w_hidden_dim: {self.dynamic_w_hidden_dim}')
+      logging.info(f'input_dim: {self.input_dim} dynamic_w_hidden_dim: {self.dynamic_w_hidden_dim}')
       self.dw1 = DenseGeneral(features=(self.num_groups, self.n_splits, self.dynamic_w_hidden_dim),
         kernel_init=initializers.normal(math.sqrt(2.0 / (self.input_dim + self.dynamic_w_hidden_dim))), **kwargs)
       self.dw_hidden_activation = nn.gelu
@@ -128,7 +128,7 @@ class DynamicWeightProjection(nn.Module):
       self.dropout = nn.Dropout(self.dynamic_dropout_rate)
 
   def __call__(self, query_vec):
-    print(f'dynamic_dropout_rate: {self.dynamic_dropout_rate}')
+    logging.info(f'dynamic_dropout_rate: {self.dynamic_dropout_rate}')
     if self.n_splits == 2:
       dw_hidden = self.dw_hidden_activation(self.dw1(query_vec))   # BTG2,64
       if self.dynamic_dropout_rate is not None:
@@ -480,7 +480,7 @@ class MultiHeadDotProductAttention(nn.Module):
     # key = key.reshape(bsz, length, self.num_heads, self.head_dim)
     # value = value.reshape(bsz, length, self.num_heads, self.head_dim)
 
-    print(f'normalize_qk: {self.normalize_qk}')
+    logging.info(f'normalize_qk: {self.normalize_qk}')
 
     if self.normalize_qk:
     # if self.dynamic_compose:  # XD
@@ -650,8 +650,9 @@ class Encoder1DBlock(nn.Module):
       param_dtype=self.param_dtype,
       precision=self.precision,
     )
+    logging.info(f'dense_proj1_init_scale: {cfg.get("dense_proj1_init_scale")}')
     self.dense_proj1 = DenseGeneral(
-      dynamic_dense_inter_dim, kernel_init=nd_dense_init(1.0, "fan_in", "normal"),  # scale 1.0 -> 0.1
+      dynamic_dense_inter_dim, kernel_init=nd_dense_init(cfg.get('dense_proj1_init_scale', 1.0), "fan_in", "normal"),  # scale 1.0 -> 0.1
       # kernel_axes=('embed', 'kv'), name='dynamic_dense_conn1',
       use_bias=False,
       **kwargs
@@ -661,8 +662,8 @@ class Encoder1DBlock(nn.Module):
     # init_v = jnp.broadcast_to(init_v, shape=(C, len(init_v))).reshape(-1)
     init_v = init_v[None].repeat(C, 0).reshape(-1)
     # init_v = init_v.repeat(C)
-    print(f'C: {C} init_v: {init_v.shape}')
-    print(f'dw_shape: {dw_shape}')
+    logging.info(f'C: {C} init_v: {init_v.shape}')
+    logging.info(f'dw_shape: {dw_shape}')
 
     # kernel = jnp.zeros(dw_shape)
     # bias = jnp.full(dw_shape[-1], self.init_v)
@@ -731,7 +732,9 @@ class Encoder1DBlock(nn.Module):
     if cfg.get('dynamic_dense_type') is not None: # XD
       # lsp: use_scale -> False
       dense_w_inner = self.dense_activation(self.dense_proj1(nn.RMSNorm(use_scale=False)(x)))
-      out["dyn_dense_w"] = self.dense_proj2(dense_w_inner)
+      s = 0.0 if cfg.get('static') else 1.0
+      logging.info(f'static scale: {s}')
+      out["dyn_dense_w"] = self.dense_proj2(dense_w_inner * s)
     return x, out
 
 
@@ -763,7 +766,7 @@ class Encoder(nn.Module):
 
   @nn.compact
   def __call__(self, x, deterministic=True):
-    print(f'dc_config222: {self.dc_config}')
+    logging.info(f'dc_config222: {self.dc_config}')
     cfg = self.dc_config or {}
     if cfg.get('dynamic_dense_type'): 
       x, hids = [x] * len(cfg['dynamic_dense_type']), [x]  # XD

@@ -83,6 +83,7 @@ def compute_params_norm(params):
       scalar_vales = {}
       for k, v in flat_param_norms.items():
         newk = '/'.join(k)
+        # newk = 'params/' + '/'.join(k)
         scalar_vales[newk] = v
       return scalar_vales
 
@@ -445,6 +446,11 @@ def main(argv):
   tensorboard_dir = os.path.join('gs://jax_llm_data_europe-west4/dcformer_compare_experiments/muddformer_logs/vit/tensorboards', basename)
   logging.info(f'tensorboard_dir: {tensorboard_dir}')
   log_writer = initialize_summary_writer(tensorboard_dir)
+
+  if jax.process_index() == 0:
+    for key, value in config.items(): 
+      log_writer.add_text(key, value)
+
   ## lsp: process为0的上传数据到workdir，其余的机器仅仅logging
   # writer = metric_writers.create_default_writer(
   #     tensorboard_dir, just_logging=False

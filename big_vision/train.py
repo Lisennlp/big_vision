@@ -527,13 +527,13 @@ def main(argv):
           # mw.measure(f"global_schedule{i if i else ''}", step_ratio)
         measurements = jax.device_get(measurements)
         # keys = measurements.keys()
-        logging.info(f'[{step}] train loss: {measurements["training_loss"]:.4f}')
-        # lsp
-        real_lr = step_ratio * u.put_cpu(config.lr)
-        log_writer.add_scalar('learning_rate', real_lr, step)
-        for name, value in measurements.items():
-          log_writer.add_scalar(name, value, step)
-        log_writer.flush()
+        if step % 10 == 0:
+          logging.info(f'[{step}] train loss: {measurements["training_loss"]:.4f}')
+          real_lr = step_ratio * u.put_cpu(config.lr)
+          log_writer.add_scalar('learning_rate', real_lr, step)
+          for name, value in measurements.items():
+            log_writer.add_scalar(name, value, step)
+          log_writer.flush()
             
         # u.chrono.tick(step)
         if not np.isfinite(measurements["training_loss"]):

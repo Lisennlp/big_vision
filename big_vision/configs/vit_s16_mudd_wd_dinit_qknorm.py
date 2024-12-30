@@ -78,7 +78,7 @@ def get_config():
   config.optax = dict(mu_dtype='bfloat16')
 
   config.lr = 0.001
-  config.wd = 0.0003 # 0.0001 -> 0.1
+  config.wd = 0.0001 # 0.0001 -> 0.1
   config.schedule = dict(warmup_steps=10_000, decay_type='cosine')
 
   config.mixup = dict(p=0.2, fold_in=None)
@@ -94,14 +94,17 @@ def get_config():
     dynamic_dense_type = 'qkvm',
     dynamic_dense_fix_last_layer = True,
     dynamic_dense_hidden_expand = 1,
-    dynamic_dense_hidden_round = False, # True -> false
+    dynamic_dense_hidden_round = True, # True -> false
     dynamic_dense_act_cls = 'gelu',
     normalize_qk = True,
+    static = False,
+    dense_proj1_init_scale = 0.1
   )
 
   config.resume = ''
   config.only_eval = False
   config.topk = 10
+  config.save_checkpoint = True
 
   # Eval section
   def get_eval(split, dataset='imagenet2012'):

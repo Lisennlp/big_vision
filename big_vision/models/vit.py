@@ -660,7 +660,7 @@ class Encoder1DBlock(nn.Module):
     self.dense_activation = _convert_to_activation_function(cfg['dynamic_dense_act_cls'])
     init_v = jnp.array([0] * ((i + 1) * factor) + [1]) # dense_bias_init_method == 'current_only'
     # init_v = jnp.broadcast_to(init_v, shape=(C, len(init_v))).reshape(-1)
-    init_v = init_v[None].repeat(C, 0).reshape(-1)
+    # init_v = init_v[None].repeat(C, 0).reshape(-1)
     # init_v = init_v.repeat(C)
     logging.info(f'C: {C} init_v: {init_v.shape}')
     logging.info(f'dw_shape: {dw_shape}')
@@ -803,6 +803,13 @@ class Encoder(nn.Module):
           i = lyr  # to be compatible with pax code
           # x, dyn_dense_w = x  # unpack tuple  # dyn_dense_w: 历史层的qkvm权重
           dyn_dense_w = out[f"block{lyr:02d}"]['dyn_dense_w']
+
+            # lsp: dyn_dense_w: b*length*C*L
+          dyn_dense_w = nn.tanh()(dyn_dense_w)
+          dense_coef = self.param("dense_coef", init_fn=lambda rng: jnp.array(0.0))
+          dynamic_dense_tanh  = cfg.get('dynamic_dense_tanh', 0.0)
+          dyn_dense_w = dynamic_dense_tanh * dense_coef * dyn_dense_w
+          self.sow('intermediates', f'dense_coef/layer_{lyr}', jnp.mean(dense_coef))
 
           self.sow('intermediates', f'dyn_dense_w/max/layer_{lyr}', jnp.max(dyn_dense_w))
           self.sow('intermediates', f'dyn_dense_w/mean/layer_{lyr}', jnp.mean(dyn_dense_w))

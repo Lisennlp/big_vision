@@ -658,28 +658,27 @@ class Encoder1DBlock(nn.Module):
       **kwargs
     )
     self.dense_activation = _convert_to_activation_function(cfg['dynamic_dense_act_cls'])
-    init_v = jnp.array([0] * ((i + 1) * factor) + [1]) # dense_bias_init_method == 'current_only'
-    # init_v = jnp.broadcast_to(init_v, shape=(C, len(init_v))).reshape(-1)
-    # init_v = init_v[None].repeat(C, 0).reshape(-1)
-    # init_v = init_v.repeat(C)
+    init_v = jnp.array([0] * ((i + 1) * factor) + [1]).astype(self.param_dtype) # dense_bias_init_method == 'current_only'
+    
+    if cfg.get('dynamic_dense_tanh', False):
+      init_v = init_v[None].repeat(C, 0)
+      self.dense_proj2 = DenseGeneral(
+        dw_shape, kernel_init=nn.initializers.constant(0),
+        use_bias=False,
+        **kwargs
+      )
+      self.dense_proj2_bias = self.param(f"dense_proj2/bias", init_fn=lambda rng: init_v)
+      self.dense_coef = self.param(f"dense_coef_{i}", init_fn=lambda rng: jnp.array(cfg.get('dense_coef', 0.01)))
+    else:
+      init_v = init_v[None].repeat(C, 0).reshape(-1)
+      self.dense_proj2 = DenseGeneral(
+        dw_shape, kernel_init=nn.initializers.constant(0),
+        use_bias=True, bias_init=nn.initializers.constant(init_v), # jnp.full support array and broadcasting
+        **kwargs
+      )
+
     logging.info(f'C: {C} init_v: {init_v.shape}')
     logging.info(f'dw_shape: {dw_shape}')
-
-    # kernel = jnp.zeros(dw_shape)
-    # bias = jnp.full(dw_shape[-1], self.init_v)
-
-    # # Manually set kernel and bias as constants
-    # self.dense_proj2_kernel = jax.lax.stop_gradient(kernel)
-    # self.dense_proj2_bias = jax.lax.stop_gradient(bias)
-    self.dense_proj2 = jnp.zeros((dynamic_dense_inter_dim, *dw_shape))
-
-
-    self.dense_proj2 = DenseGeneral(
-      dw_shape, kernel_init=nn.initializers.constant(0),
-      # kernel_axes=('kv', None), name='dynamic_dense_conn2',
-      use_bias=True, bias_init=nn.initializers.constant(init_v), # jnp.full support array and broadcasting
-      **kwargs
-    )
 
   @nn.compact
   def __call__(self, x, deterministic=True):
@@ -728,13 +727,22 @@ class Encoder1DBlock(nn.Module):
     y = nn.Dropout(rate=self.dropout)(y, deterministic)
     x = out["+mlp"] = x + y
     x = nn.with_logical_constraint(x, ("act_batch", "act_len", "act_emb"))
-    
+
     if cfg.get('dynamic_dense_type') is not None: # XD
       # lsp: use_scale -> False
       dense_w_inner = self.dense_activation(self.dense_proj1(nn.RMSNorm(use_scale=False)(x)))
       s = 0.0 if cfg.get('static') else 1.0
       logging.info(f'static scale: {s}')
-      out["dyn_dense_w"] = self.dense_proj2(dense_w_inner * s)
+      dyn_dense_w = self.dense_proj2(dense_w_inner * s)
+
+      if cfg.get('dynamic_dense_tanh', False):
+          dyn_dense_w = nn.tanh(dyn_dense_w)
+          dyn_dense_w = self.dense_coef * dyn_dense_w + self.dense_proj2_bias
+
+      out["dyn_dense_w"] = dyn_dense_w
+
+      # lsp: dyn_dense_w: b*length*C*L
+    # self.sow('intermediates', 'dense_coef', jnp.mean(self.dense_coef))
     return x, out
 
 
@@ -804,12 +812,12 @@ class Encoder(nn.Module):
           # x, dyn_dense_w = x  # unpack tuple  # dyn_dense_w: 历史层的qkvm权重
           dyn_dense_w = out[f"block{lyr:02d}"]['dyn_dense_w']
 
-            # lsp: dyn_dense_w: b*length*C*L
-          dyn_dense_w = nn.tanh()(dyn_dense_w)
-          dense_coef = self.param("dense_coef", init_fn=lambda rng: jnp.array(0.0))
-          dynamic_dense_tanh  = cfg.get('dynamic_dense_tanh', 0.0)
-          dyn_dense_w = dynamic_dense_tanh * dense_coef * dyn_dense_w
-          self.sow('intermediates', f'dense_coef/layer_{lyr}', jnp.mean(dense_coef))
+          #   # lsp: dyn_dense_w: b*length*C*L
+          # dyn_dense_w = nn.tanh(dyn_dense_w)
+          # dense_coef = self.param(f"dense_coef_{lyr}", init_fn=lambda rng: jnp.array(0.01))
+          # dynamic_dense_tanh  = cfg.get('dynamic_dense_tanh', 0.0)
+          # dyn_dense_w = dynamic_dense_tanh * dense_coef * dyn_dense_w
+          # self.sow('intermediates', f'dense_coef/layer_{lyr}', jnp.mean(dense_coef))
 
           self.sow('intermediates', f'dyn_dense_w/max/layer_{lyr}', jnp.max(dyn_dense_w))
           self.sow('intermediates', f'dyn_dense_w/mean/layer_{lyr}', jnp.mean(dyn_dense_w))

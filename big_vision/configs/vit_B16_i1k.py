@@ -82,16 +82,16 @@ def get_config():
   config.optax_name = 'scale_by_adam'
   config.optax = dict(mu_dtype='bfloat16')
 
-  config.lr = 3.0e-4
+  config.lr = 1.0e-3
   # lsp: 0.0001 -> 0.05 -> 0.0001
   config.wd = 1e-5
   # lsp:10000 -> 1000 -> 10000
-  config.schedule = dict(warmup_steps=1000, decay_type='cosine')
+  config.schedule = dict(warmup_steps=10000, decay_type='cosine')
   # lsp: 0.2 -> 0.5  -> 0.2
   config.mixup = dict(p=0.2, fold_in=None)
 
   config.resume = None
-  config.save_checkpoint = True
+  config.save_checkpoint = False
 
   config.resume = ''
   config.only_eval = False

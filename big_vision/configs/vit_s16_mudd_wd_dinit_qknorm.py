@@ -94,7 +94,7 @@ def get_config():
     dynamic_dense_type = 'qkvm',
     dynamic_dense_fix_last_layer = True,
     dynamic_dense_hidden_expand = 1,
-    dynamic_dense_hidden_round = True, # True -> false
+    dynamic_dense_hidden_round = False, # True -> false
     dynamic_dense_act_cls = 'gelu',
     normalize_qk = True,
     static = False,

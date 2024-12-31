@@ -96,8 +96,10 @@ def get_config():
     dynamic_dense_hidden_expand = 1,
     dynamic_dense_hidden_round = False, # True -> false
     dynamic_dense_act_cls = 'gelu',
-    static = True,
-    dense_proj1_init_scale = 0.1
+    static = False,
+    dense_proj1_init_scale = 0.001,
+    dynamic_dense_tanh = False,
+    dense_coef = 0.01
   )
 
   config.resume = ''

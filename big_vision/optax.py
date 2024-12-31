@@ -19,7 +19,7 @@ import big_vision.utils as u
 import jax
 import jax.numpy as jnp
 import optax
-
+from absl import logging
 
 def find_states(opt_state, cls):
   leaves = jax.tree_util.tree_leaves(
@@ -88,6 +88,7 @@ def make(config, params, *, sched_kw):
 
   # Learning rate multipliers. Defaults to 1.0.
   lr_mult_txs = [optax.scale(config.lr)]
+  logging.info(f'lr_mult_txs000: {lr_mult_txs} length: {len(lr_mult_txs)}')
   if config.get("lr_mults"):
     masks, mults = _make_mask_trees(params, config.lr_mults, "config.lr_mults")
     assert all(mult > 0 for mult in mults), (
@@ -96,7 +97,7 @@ def make(config, params, *, sched_kw):
         optax.masked(optax.scale(mult), mask)
         for mult, mask in zip(mults, masks)
     ]
-    print(f'lr_mult_txs: {lr_mult_txs}')
+    logging.info(f'lr_mult_txs111: {lr_mult_txs} length: {len(lr_mult_txs)}')
 
   # Weight decay. Defaults to 0.0.
   # Weight decay is not gradient-based but instead uses "params side-input".

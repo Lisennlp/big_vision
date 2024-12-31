@@ -697,22 +697,22 @@ class Encoder1DBlock(nn.Module):
     # x = nn.with_logical_constraint(x, ("act_batch", "act_len", "act_emb"))
     # y = nn.LayerNorm()(x)
 
-    y = out['sa'] = MultiHeadDotProductAttention(
-        num_heads=self.num_heads,
-        dtype=self.dtype_mm,
-        qkv_features=x.shape[-1],
-        kernel_init=nn.initializers.xavier_uniform(),
-        deterministic=deterministic,
-        dynamic_compose=cfg.get('dynamic_compose', False),
-        normalize_qk=cfg.get('normalize_qk', False),
-    )(*inputs)  # XD
-
-    # y = out["sa"] = nn.MultiHeadDotProductAttention(
+    # y = out['sa'] = MultiHeadDotProductAttention(
     #     num_heads=self.num_heads,
+    #     dtype=self.dtype_mm,
+    #     qkv_features=x.shape[-1],
     #     kernel_init=nn.initializers.xavier_uniform(),
     #     deterministic=deterministic,
-    #     dtype=self.dtype_mm,
-    # )(*inputs)
+    #     dynamic_compose=cfg.get('dynamic_compose', False),
+    #     normalize_qk=cfg.get('normalize_qk', False),
+    # )(*inputs)  # XD
+
+    y = out["sa"] = nn.MultiHeadDotProductAttention(
+        num_heads=self.num_heads,
+        kernel_init=nn.initializers.xavier_uniform(),
+        deterministic=deterministic,
+        dtype=self.dtype_mm,
+    )(*inputs)
 
     y = nn.with_logical_constraint(y, ("act_batch", "act_len", "act_emb"))
     y = nn.Dropout(rate=self.dropout)(y, deterministic)

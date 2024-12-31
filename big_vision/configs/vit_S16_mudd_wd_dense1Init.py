@@ -97,7 +97,7 @@ def get_config():
     dynamic_dense_hidden_round = False, # True -> false
     dynamic_dense_act_cls = 'gelu',
     static = False,
-    dense_proj1_init_scale = 0.001,
+    dense_proj1_init_scale = 0.01,
     dynamic_dense_tanh = False,
     dense_coef = 0.01
   )
@@ -106,6 +106,10 @@ def get_config():
   config.only_eval = False
   config.topk = 10
   config.save_checkpoint = True
+  #wd_mults = confi  g.get("wd_mults", [(".*/kernel$", 1.0)])
+  mudd_params_lr_scale = 0.1  # global lr scale
+  mudd_params_names = ['dense_proj1/kernel', 'dense_proj2/kernel', 'dense_proj2/bias']
+  config.lr_mults = [(f'{name}$', mudd_params_lr_scale) for name in mudd_params_names]
 
   # Eval section
   def get_eval(split, dataset='imagenet2012'):

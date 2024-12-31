@@ -96,6 +96,7 @@ def make(config, params, *, sched_kw):
         optax.masked(optax.scale(mult), mask)
         for mult, mask in zip(mults, masks)
     ]
+    print(f'lr_mult_txs: {lr_mult_txs}')
 
   # Weight decay. Defaults to 0.0.
   # Weight decay is not gradient-based but instead uses "params side-input".

@@ -636,6 +636,7 @@ class Encoder1DBlock(nn.Module):
     
     factor = 1
     i = int(self.name.split('_')[-1])  # name=f"layers_{i}"
+    # todo: when C = 1， set staic.
     C = 1 if cfg['dynamic_dense_fix_last_layer'] and i == self.num_decoder_layers - 1 else len(cfg['dynamic_dense_type'])
     dw_shape = (C, ((i + 1) * factor + 1)) # 加词向量那一层。因此最后总层数+1
     dynamic_dense_inter_dim = int(math.prod(dw_shape) * cfg['dynamic_dense_hidden_expand'])
@@ -650,11 +651,12 @@ class Encoder1DBlock(nn.Module):
       param_dtype=self.param_dtype,
       precision=self.precision,
     )
-    logging.info(f'dense_proj1_init_scale: {cfg.get("dense_proj1_init_scale")}')
+    dense1_bias = cfg.get('dense1_bias', False)
+    logging.info(f'dense_proj1_init_scale: {cfg.get("dense_proj1_init_scale")} dense1_bias: {dense1_bias}')
     self.dense_proj1 = DenseGeneral(
       dynamic_dense_inter_dim, kernel_init=nd_dense_init(cfg.get('dense_proj1_init_scale', 1.0), "fan_in", "normal"),  # scale 1.0 -> 0.1
       # kernel_axes=('embed', 'kv'), name='dynamic_dense_conn1',
-      use_bias=False,
+      use_bias=dense1_bias,  # 0102 todo: add bias, dense_proj1_init_scale init based on hc tanh
       **kwargs
     )
     self.dense_activation = _convert_to_activation_function(cfg['dynamic_dense_act_cls'])
@@ -696,7 +698,7 @@ class Encoder1DBlock(nn.Module):
 
     # x = nn.with_logical_constraint(x, ("act_batch", "act_len", "act_emb"))
     # y = nn.LayerNorm()(x)
-
+    # 会影响保存的名字
     # y = out['sa'] = MultiHeadDotProductAttention(
     #     num_heads=self.num_heads,
     #     dtype=self.dtype_mm,

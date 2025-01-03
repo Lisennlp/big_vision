@@ -738,7 +738,13 @@ class Encoder1DBlock(nn.Module):
       if self.C == 1 and cfg.get('last_layer_static'):
         s = 0.0
       logging.info(f'static scale: {s}')
+      # b s c l
       dyn_dense_w = self.dense_proj2(dense_w_inner * s)
+
+      print(f"dynamic_m_tanh: {cfg.get('dynamic_m_tanh', False)}")
+      if cfg.get('dynamic_m_tanh', False):
+        assert not cfg.get('dynamic_dense_tanh', False), print('dynamic_dense_tanh must be false when dynamic_m_tanh is true.')
+        dyn_dense_w = jnp.concatenate([dyn_dense_w[:, :, :-1], nn.tanh(dyn_dense_w[:, :, -1:])], axis=2)
 
       if cfg.get('dynamic_dense_tanh', False):
           dyn_dense_w = nn.tanh(dyn_dense_w)

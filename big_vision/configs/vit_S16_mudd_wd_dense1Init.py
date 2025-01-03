@@ -95,11 +95,14 @@ def get_config():
     dynamic_dense_fix_last_layer = True,
     dynamic_dense_hidden_expand = 1,
     dynamic_dense_hidden_round = False, # True -> false
-    dynamic_dense_act_cls = 'tanh', # lsp
+    dynamic_dense_act_cls = 'gelu', # lsp, gelu, tanh
     static = False,
     dense_proj1_init_scale = 1.0,
     dynamic_dense_tanh = False,
-    dense_coef = 0.01
+    dense_coef = 0.01,
+    dense1_bias = False,
+    last_layer_static = False,
+    dynamic_m_tanh = True
   )
 
   config.resume = ''
@@ -108,9 +111,12 @@ def get_config():
   config.save_checkpoint = True
   #wd_mults = confi  g.get("wd_mults", [(".*/kernel$", 1.0)])
   mudd_params_lr_scale = 1.0  # global lr scale
-  mudd_params_names = ['dense_proj1/kernel', 'dense_proj2/kernel', 'dense_proj2/bias']
-#   mudd_params_names = ['dense_proj1/kernel', 'dense_proj2/kernel']
-  config.lr_mults = [(f'.*/{name}$', mudd_params_lr_scale) for name in mudd_params_names]
+
+  if mudd_params_lr_scale != 1.0:
+    # 设置了这个会影响优化器的保存名字，然后出发模型加载bug
+    mudd_params_names = ['dense_proj1/kernel', 'dense_proj2/kernel', 'dense_proj2/bias']
+    #   mudd_params_names = ['dense_proj1/kernel', 'dense_proj2/kernel']
+    config.lr_mults = [(f'.*/{name}$', mudd_params_lr_scale) for name in mudd_params_names]
 
   # Eval section
   def get_eval(split, dataset='imagenet2012'):

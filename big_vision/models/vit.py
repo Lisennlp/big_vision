@@ -638,6 +638,7 @@ class Encoder1DBlock(nn.Module):
     i = int(self.name.split('_')[-1])  # name=f"layers_{i}"
     # todo: when C = 1， set staic.
     C = 1 if cfg['dynamic_dense_fix_last_layer'] and i == self.num_decoder_layers - 1 else len(cfg['dynamic_dense_type'])
+    self.C = C
     dw_shape = (C, ((i + 1) * factor + 1)) # 加词向量那一层。因此最后总层数+1
     dynamic_dense_inter_dim = int(math.prod(dw_shape) * cfg['dynamic_dense_hidden_expand'])
     if cfg['dynamic_dense_fix_last_layer'] and i == self.num_decoder_layers - 1:
@@ -734,6 +735,8 @@ class Encoder1DBlock(nn.Module):
       # lsp: use_scale -> False
       dense_w_inner = self.dense_activation(self.dense_proj1(nn.RMSNorm(use_scale=False)(x)))
       s = 0.0 if cfg.get('static') else 1.0
+      if self.C == 1 and cfg.get('last_layer_static'):
+        s = 0.0
       logging.info(f'static scale: {s}')
       dyn_dense_w = self.dense_proj2(dense_w_inner * s)
 

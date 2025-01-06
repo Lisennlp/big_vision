@@ -741,9 +741,9 @@ class Encoder1DBlock(nn.Module):
       # b s c l
       dyn_dense_w = self.dense_proj2(dense_w_inner * s)
 
-      print(f"dynamic_m_tanh: {cfg.get('dynamic_m_tanh', False)}")
+      logging.info(f"dynamic_m_tanh: {cfg.get('dynamic_m_tanh', False)}")
       if cfg.get('dynamic_m_tanh', False):
-        assert not cfg.get('dynamic_dense_tanh', False), print('dynamic_dense_tanh must be false when dynamic_m_tanh is true.')
+        assert not cfg.get('dynamic_dense_tanh', False), logging.info('dynamic_dense_tanh must be false when dynamic_m_tanh is true.')
         dyn_dense_w = jnp.concatenate([dyn_dense_w[:, :, :-1], nn.tanh(dyn_dense_w[:, :, -1:])], axis=2)
 
       if cfg.get('dynamic_dense_tanh', False):
@@ -822,13 +822,6 @@ class Encoder(nn.Module):
           i = lyr  # to be compatible with pax code
           # x, dyn_dense_w = x  # unpack tuple  # dyn_dense_w: 历史层的qkvm权重
           dyn_dense_w = out[f"block{lyr:02d}"]['dyn_dense_w']
-
-          #   # lsp: dyn_dense_w: b*length*C*L
-          # dyn_dense_w = nn.tanh(dyn_dense_w)
-          # dense_coef = self.param(f"dense_coef_{lyr}", init_fn=lambda rng: jnp.array(0.01))
-          # dynamic_dense_tanh  = cfg.get('dynamic_dense_tanh', 0.0)
-          # dyn_dense_w = dynamic_dense_tanh * dense_coef * dyn_dense_w
-          # self.sow('intermediates', f'dense_coef/layer_{lyr}', jnp.mean(dense_coef))
 
           self.sow('intermediates', f'dyn_dense_w/max/layer_{lyr}', jnp.max(dyn_dense_w))
           self.sow('intermediates', f'dyn_dense_w/mean/layer_{lyr}', jnp.mean(dyn_dense_w))

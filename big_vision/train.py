@@ -24,6 +24,7 @@ import importlib
 # import multiprocessing.pool
 import os
 import json
+import gc
 from etils import epath
 
 from absl import app
@@ -527,7 +528,7 @@ def main(argv):
           # mw.measure(f"global_schedule{i if i else ''}", step_ratio)
         measurements = jax.device_get(measurements)
         # keys = measurements.keys()
-        if step % 10 == 0:
+        if step % 20 == 0:
           logging.info(f'[{step}] train loss: {measurements["training_loss"]:.4f}')
           real_lr = step_ratio * u.put_cpu(config.lr)
           log_writer.add_scalar('learning_rate', real_lr, step)
@@ -540,6 +541,10 @@ def main(argv):
           raise RuntimeError(f"The loss became nan or inf somewhere within steps "
                             f"[{step - get_steps('log_training')}, {step}]")
 
+        del measurements
+        
+      if step % 20 == 0:
+        gc.collect()
       # Checkpoint saving
       keep_ckpt_steps = get_steps("keep_ckpt", None) or total_steps
       # itstime: get_steps("ckpt", None)为None的时候
@@ -573,9 +578,10 @@ def main(argv):
           with u.chrono.log_timing(f"z/secs/eval/{name}"):
             with mesh, nn.logical_axis_rules([("act_batch", "data")]):
               for key, value in evaluator.run(train_state):
-                mw.measure(f"{prefix}{key}", jax.device_get(value))
+                value = jax.device_get(value)
+                mw.measure(f"{prefix}{key}", value)
                 if jax.process_index() == 0:
-                  log_writer.add_scalar(f'{prefix}{key}', jax.device_get(value), step)
+                  log_writer.add_scalar(f'{prefix}{key}', value, step)
 
           u.chrono.resume()
       mw.step_end()

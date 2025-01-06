@@ -98,11 +98,12 @@ def get_config():
     dynamic_dense_act_cls = 'gelu', # lsp, gelu, tanh
     static = False,
     dense_proj1_init_scale = 1.0,
-    dynamic_dense_tanh = False,
+    dynamic_dense_tanh = True,
     dense_coef = 0.01,
     dense1_bias = False,
     last_layer_static = False,
-    dynamic_m_tanh = True
+    dynamic_m_tanh = False,
+    mudd_dropout=0.1
   )
 
   config.resume = ''

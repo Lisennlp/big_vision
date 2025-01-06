@@ -734,6 +734,10 @@ class Encoder1DBlock(nn.Module):
     if cfg.get('dynamic_dense_type') is not None: # XD
       # lsp: use_scale -> False
       dense_w_inner = self.dense_activation(self.dense_proj1(nn.RMSNorm(use_scale=False)(x)))
+
+      if cfg.get('mudd_dropout', 0.0) > 0.0:
+        dense_w_inner = nn.Dropout(rate=cfg.get('mudd_dropout', 0.0))(dense_w_inner, deterministic)
+
       s = 0.0 if cfg.get('static') else 1.0
       if self.C == 1 and cfg.get('last_layer_static'):
         s = 0.0
@@ -749,6 +753,9 @@ class Encoder1DBlock(nn.Module):
       if cfg.get('dynamic_dense_tanh', False):
           dyn_dense_w = nn.tanh(dyn_dense_w)
           dyn_dense_w = self.dense_coef * dyn_dense_w + self.dense_proj2_bias
+
+      if cfg.get('mudd_dropout', 0.0) > 0.0:
+        dyn_dense_w = nn.Dropout(rate=cfg.get('mudd_dropout', 0.0))(dyn_dense_w, deterministic)
 
       out["dyn_dense_w"] = dyn_dense_w
 

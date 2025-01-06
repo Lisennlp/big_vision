@@ -735,6 +735,7 @@ class Encoder1DBlock(nn.Module):
       # lsp: use_scale -> False
       dense_w_inner = self.dense_activation(self.dense_proj1(nn.RMSNorm(use_scale=False)(x)))
 
+      logging.info(f"mudd_dropout: cfg.get('mudd_dropout', 0.0)")
       if cfg.get('mudd_dropout', 0.0) > 0.0:
         dense_w_inner = nn.Dropout(rate=cfg.get('mudd_dropout', 0.0))(dense_w_inner, deterministic)
 

@@ -534,7 +534,7 @@ def main(argv):
           log_writer.add_scalar('learning_rate', real_lr, step)
           for name, value in measurements.items():
             log_writer.add_scalar(name, value, step)
-          log_writer.flush()
+          log_writer.flush() 
             
         # u.chrono.tick(step)
         if not np.isfinite(measurements["training_loss"]):

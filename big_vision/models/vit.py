@@ -619,6 +619,15 @@ def nd_dense_init(scale, mode, distribution):  # XD: from maxtext.initializers
   return init_fn
 
 
+def check_list_type(variable):
+    if isinstance(variable, list):
+        if all(isinstance(item, list) for item in variable):
+            return 2
+        return 1
+    elif variable is None:
+      return -1
+    return 0
+
 class Encoder1DBlock(nn.Module):
   """Single transformer encoder block (MHSA + MLP)."""
   mlp_dim: Optional[int] = None  # Defaults to 4x input dim
@@ -636,9 +645,7 @@ class Encoder1DBlock(nn.Module):
     
     factor = 1
     i = int(self.name.split('_')[-1])  # name=f"layers_{i}"
-    # todo: when C = 1， set staic.
     C = 1 if cfg['dynamic_dense_fix_last_layer'] and i == self.num_decoder_layers - 1 else len(cfg['dynamic_dense_type'])
-    self.C = C
     dw_shape = (C, ((i + 1) * factor + 1)) # 加词向量那一层。因此最后总层数+1
     dynamic_dense_inter_dim = int(math.prod(dw_shape) * cfg['dynamic_dense_hidden_expand'])
     if cfg['dynamic_dense_fix_last_layer'] and i == self.num_decoder_layers - 1:
@@ -652,12 +659,11 @@ class Encoder1DBlock(nn.Module):
       param_dtype=self.param_dtype,
       precision=self.precision,
     )
-    dense1_bias = cfg.get('dense1_bias', False)
-    logging.info(f'dense_proj1_init_scale: {cfg.get("dense_proj1_init_scale")} dense1_bias: {dense1_bias}')
+    logging.info(f'dense_proj1_init_scale: {cfg.get("dense_proj1_init_scale")}')
     self.dense_proj1 = DenseGeneral(
       dynamic_dense_inter_dim, kernel_init=nd_dense_init(cfg.get('dense_proj1_init_scale', 1.0), "fan_in", "normal"),  # scale 1.0 -> 0.1
       # kernel_axes=('embed', 'kv'), name='dynamic_dense_conn1',
-      use_bias=dense1_bias,  # 0102 todo: add bias, dense_proj1_init_scale init based on hc tanh
+      use_bias=False,
       **kwargs
     )
     self.dense_activation = _convert_to_activation_function(cfg['dynamic_dense_act_cls'])
@@ -671,7 +677,23 @@ class Encoder1DBlock(nn.Module):
         **kwargs
       )
       self.dense_proj2_bias = self.param(f"dense_proj2/bias", init_fn=lambda rng: init_v)
-      self.dense_coef = self.param(f"dense_coef_{i}", init_fn=lambda rng: jnp.array(cfg.get('dense_coef', 0.01)))
+
+      layer_dense_coef = cfg.get('dense_coef')
+      if check_list_type(layer_dense_coef) == 2:
+        self.dense_coef = self.param(f"dense_coef_{i}", init_fn=lambda rng: layer_dense_coef[0][0] *  
+                                    jnp.ones(shape=dw_shape).reshape(1, 1, C, -1).astype(self.param_dtype))
+      elif check_list_type(layer_dense_coef) == 1:
+        self.dense_coef = self.param(f"dense_coef_{i}", init_fn=lambda rng: layer_dense_coef[0] *  
+                                    jnp.ones(shape=dw_shape).reshape(1, 1, C, -1).astype(self.param_dtype))
+      elif check_list_type(layer_dense_coef) == 0:
+        self.dense_coef = self.param(f"dense_coef_{i}", init_fn=lambda rng: layer_dense_coef *  
+                                    jnp.ones(shape=dw_shape).reshape(1, 1, C, -1).astype(self.param_dtype))
+      else:
+        self.dense_coef = None
+
+      logging.info(f'dense_coef00: {self.dense_coef.shape}')
+
+      # self.dense_coef = self.param(f"dense_coef_{i}", init_fn=lambda rng: jnp.array(cfg.get('dense_coef', 0.01)))
     else:
       init_v = init_v[None].repeat(C, 0).reshape(-1)
       self.dense_proj2 = DenseGeneral(
@@ -699,23 +721,23 @@ class Encoder1DBlock(nn.Module):
 
     # x = nn.with_logical_constraint(x, ("act_batch", "act_len", "act_emb"))
     # y = nn.LayerNorm()(x)
-    # 会影响保存的名字
-    # y = out['sa'] = MultiHeadDotProductAttention(
-    #     num_heads=self.num_heads,
-    #     dtype=self.dtype_mm,
-    #     qkv_features=x.shape[-1],
-    #     kernel_init=nn.initializers.xavier_uniform(),
-    #     deterministic=deterministic,
-    #     dynamic_compose=cfg.get('dynamic_compose', False),
-    #     normalize_qk=cfg.get('normalize_qk', False),
-    # )(*inputs)  # XD
 
-    y = out["sa"] = nn.MultiHeadDotProductAttention(
+    y = out['sa'] = MultiHeadDotProductAttention(
         num_heads=self.num_heads,
+        dtype=self.dtype_mm,
+        qkv_features=x.shape[-1],
         kernel_init=nn.initializers.xavier_uniform(),
         deterministic=deterministic,
-        dtype=self.dtype_mm,
-    )(*inputs)
+        dynamic_compose=cfg.get('dynamic_compose', False),
+        normalize_qk=cfg.get('normalize_qk', False),
+    )(*inputs)  # XD
+
+    # y = out["sa"] = nn.MultiHeadDotProductAttention(
+    #     num_heads=self.num_heads,
+    #     kernel_init=nn.initializers.xavier_uniform(),
+    #     deterministic=deterministic,
+    #     dtype=self.dtype_mm,
+    # )(*inputs)
 
     y = nn.with_logical_constraint(y, ("act_batch", "act_len", "act_emb"))
     y = nn.Dropout(rate=self.dropout)(y, deterministic)
@@ -734,29 +756,25 @@ class Encoder1DBlock(nn.Module):
     if cfg.get('dynamic_dense_type') is not None: # XD
       # lsp: use_scale -> False
       dense_w_inner = self.dense_activation(self.dense_proj1(nn.RMSNorm(use_scale=False)(x)))
-
-      logging.info(f"mudd_dropout: {cfg.get('mudd_dropout', 0.0)}")
-      if cfg.get('mudd_dropout', 0.0) > 0.0:
-        dense_w_inner = nn.Dropout(rate=cfg.get('mudd_dropout', 0.0))(dense_w_inner, deterministic)
+      mudd_dropout = cfg.get('mudd_dropout', 0.0)
+      logging.info(f'mudd_dropout: {mudd_dropout}')
+      if mudd_dropout > 0.0:
+        dense_w_inner = nn.Dropout(rate=mudd_dropout)(dense_w_inner, deterministic)
 
       s = 0.0 if cfg.get('static') else 1.0
-      if self.C == 1 and cfg.get('last_layer_static'):
-        s = 0.0
       logging.info(f'static scale: {s}')
-      # b s c l
       dyn_dense_w = self.dense_proj2(dense_w_inner * s)
-
-      logging.info(f"dynamic_m_tanh: {cfg.get('dynamic_m_tanh', False)}")
-      if cfg.get('dynamic_m_tanh', False):
-        assert not cfg.get('dynamic_dense_tanh', False), logging.info('dynamic_dense_tanh must be false when dynamic_m_tanh is true.')
-        dyn_dense_w = jnp.concatenate([dyn_dense_w[:, :, :-1], nn.tanh(dyn_dense_w[:, :, -1:])], axis=2)
 
       if cfg.get('dynamic_dense_tanh', False):
           dyn_dense_w = nn.tanh(dyn_dense_w)
+          assert len(self.dense_coef.shape) == len(dyn_dense_w.shape)
           dyn_dense_w = self.dense_coef * dyn_dense_w + self.dense_proj2_bias
 
-      if cfg.get('mudd_dropout', 0.0) > 0.0:
-        dyn_dense_w = nn.Dropout(rate=cfg.get('mudd_dropout', 0.0))(dyn_dense_w, deterministic)
+      # if cfg.get('mudd_dropout', 0.0) > 0.0:
+      #     # btcl
+      #     history_dyn_dense_w = nn.Dropout(rate=cfg.get('mudd_dropout', 0.0))(dyn_dense_w[...,:-1], deterministic)
+      #     dyn_dense_w = jnp.concatenate([history_dyn_dense_w, dyn_dense_w[...,-1:]], axis=-1)
+
 
       out["dyn_dense_w"] = dyn_dense_w
 
@@ -830,6 +848,13 @@ class Encoder(nn.Module):
           i = lyr  # to be compatible with pax code
           # x, dyn_dense_w = x  # unpack tuple  # dyn_dense_w: 历史层的qkvm权重
           dyn_dense_w = out[f"block{lyr:02d}"]['dyn_dense_w']
+
+          #   # lsp: dyn_dense_w: b*length*C*L
+          # dyn_dense_w = nn.tanh(dyn_dense_w)
+          # dense_coef = self.param(f"dense_coef_{lyr}", init_fn=lambda rng: jnp.array(0.01))
+          # dynamic_dense_tanh  = cfg.get('dynamic_dense_tanh', 0.0)
+          # dyn_dense_w = dynamic_dense_tanh * dense_coef * dyn_dense_w
+          # self.sow('intermediates', f'dense_coef/layer_{lyr}', jnp.mean(dense_coef))
 
           self.sow('intermediates', f'dyn_dense_w/max/layer_{lyr}', jnp.max(dyn_dense_w))
           self.sow('intermediates', f'dyn_dense_w/mean/layer_{lyr}', jnp.mean(dyn_dense_w))

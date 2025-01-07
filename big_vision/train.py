@@ -510,6 +510,7 @@ def main(argv):
     for step, batch in zip(range(first_step + 1, total_steps + 1), train_iter):
       mw.step_start(step)
       if (step + 1) % 50000 == 0 and jax.process_index() == 0:
+        log_writer.flush()
         log_writer.close()
         log_writer = initialize_summary_writer(tensorboard_dir)
 
@@ -537,7 +538,9 @@ def main(argv):
           log_writer.add_scalar('learning_rate', real_lr, step)
           for name, value in measurements.items():
             log_writer.add_scalar(name, value, step)
-          log_writer.flush() 
+
+          if step % 500 == 0:
+            log_writer.flush() 
             
         # u.chrono.tick(step)
         if not np.isfinite(measurements["training_loss"]):

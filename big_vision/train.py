@@ -509,6 +509,9 @@ def main(argv):
     write_note("Starting training loop, compiling the first step...")
     for step, batch in zip(range(first_step + 1, total_steps + 1), train_iter):
       mw.step_start(step)
+      if (step + 1) % 50000 == 0 and jax.process_index() == 0:
+        log_writer.close()
+        log_writer = initialize_summary_writer(tensorboard_dir)
 
       with jax.profiler.StepTraceAnnotation("train_step", step_num=step):
         with u.chrono.log_timing("z/secs/update0", noop=step > first_step + 1):

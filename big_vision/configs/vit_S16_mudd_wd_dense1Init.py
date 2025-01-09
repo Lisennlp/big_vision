@@ -34,7 +34,7 @@ def get_config():
   """Config for training."""
   config = mlc.ConfigDict()
 
-  config.seed = 0
+  config.seed = 9876
   config.total_epochs = 90
   config.num_classes = 1000
   config.loss = 'softmax_xent'

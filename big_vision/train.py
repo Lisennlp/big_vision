@@ -26,6 +26,7 @@ import os
 import json
 import gc
 from etils import epath
+import random
 
 from absl import app
 from absl import flags
@@ -210,7 +211,7 @@ def main(argv):
   # However, full training still won't be deterministic, for example due to the
   # tf.data pipeline not being deterministic even if we would set TF seed.
   # See (internal link) for a fun read on what it takes.
-  rng = jax.random.PRNGKey(u.put_cpu(config.get("seed", 0)))
+  rng = jax.random.PRNGKey(u.put_cpu(config.get("seed", 9876)))
 
   write_note("Inferring parameter shapes...")
   rng, rng_init = jax.random.split(rng)
@@ -573,7 +574,6 @@ def main(argv):
         if ckpt_mngr is not None:
           u.save_checkpoint_ts(ckpt_mngr, ckpt, save_ckpt_path, step, keep, keep_steps=keep_steps)
           
-
         u.chrono.resume()
 
       for (name, evaluator, log_steps, prefix) in evaluators():
@@ -616,4 +616,8 @@ def main(argv):
 
 
 if __name__ == "__main__":
+  seed = 9876
+  random.seed(seed)
+  np.random.seed(seed)
+  tf.random.set_seed(9876)
   app.run(main)

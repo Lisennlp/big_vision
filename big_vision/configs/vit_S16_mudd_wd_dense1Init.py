@@ -94,7 +94,8 @@ def get_config():
     static = False,
     dense_proj1_init_scale = 1.0,
     dynamic_qkvm_tanh = False,
-    dynamic_m_tanh = True,
+    dynamic_qkv_tanh = True,
+    dynamic_m_tanh = False,
     dense_coef = 0.01,
     mudd_dropout = 0.0,
     last_layer_static = False

@@ -756,6 +756,9 @@ class Encoder1DBlock(nn.Module):
       elif cfg.get('dynamic_m_tanh'):
         assert not cfg.get('dynamic_dense_tanh')
         dyn_dense_kernel_out = jnp.concatenate([dyn_dense_kernel_out[:, :, :-1], self.dense_coef * nn.tanh(dyn_dense_kernel_out[:, :, -1:])], axis=2)
+      elif cfg.get('dynamic_qkv_tanh'):
+        assert not cfg.get('dynamic_dense_tanh')
+        dyn_dense_kernel_out = jnp.concatenate([self.dense_coef * nn.tanh(dyn_dense_kernel_out[:, :, :-1]), self.dense_coef * nn.sigmoid(dyn_dense_kernel_out[:, :, -1:])], axis=2)
       elif cfg.get('static'):
         assert not cfg.get('dynamic_dense_tanh') and not cfg.get('dynamic_qkvm_tanh')
         dyn_dense_kernel_out = 0.0

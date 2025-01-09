@@ -86,7 +86,7 @@ def training(input_config, prefetch=2):
         pre_filter_fn=config.get("pre_filter_fn"),
         post_filter_fn=config.get("post_filter_fn"),
     )
-
+  tf.random.set_seed(9876)
   batch_size = input_config.batch_size
   # Handle separately the common case when no mixing happens.
   if isinstance(input_config.data.get("name"), str):

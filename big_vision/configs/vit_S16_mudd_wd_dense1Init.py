@@ -83,11 +83,6 @@ def get_config():
 
   config.mixup = dict(p=0.2, fold_in=None)
 
-#   config.dc_config = dict(
-#       dynamic_compose=True,
-#       dynamic_dropout_rate=0.0,
-#   )
-
   config.dc_config = dict(
     dynamic_compose=False,
     dynamic_dropout_rate=0.0,
@@ -98,9 +93,11 @@ def get_config():
     dynamic_dense_act_cls = 'gelu',
     static = False,
     dense_proj1_init_scale = 1.0,
-    dynamic_dense_tanh = True,
+    dynamic_qkvm_tanh = False,
+    dynamic_m_tanh = True,
     dense_coef = 0.01,
-    mudd_dropout = 0.2
+    mudd_dropout = 0.0,
+    last_layer_static = False
   )
 
   config.resume = ''

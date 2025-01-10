@@ -34,7 +34,7 @@ def get_config():
   """Config for training."""
   config = mlc.ConfigDict()
 
-  config.seed = 0
+  config.seed = 9876
   config.total_epochs = 90
   config.num_classes = 1000
   config.loss = 'softmax_xent'
@@ -65,7 +65,7 @@ def get_config():
   # Model section
   config.model_name = 'vit'
   config.model = dict(
-      variant='M/16',
+      variant='M-B/16',  # lsp
       rep_size=True,
       pool_type='gap',
       posemb='sincos2d',
@@ -88,6 +88,7 @@ def get_config():
   config.resume = ''
   config.only_eval = False
   config.topk = 10
+  config.save_checkpoint = True
 
 
   # Eval section

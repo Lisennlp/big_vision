@@ -96,7 +96,7 @@ def get_config():
     dynamic_qkvm_tanh = False,
     dynamic_qkv_tanh = True,
     dynamic_m_tanh = False,
-    dense_coef = 0.01,
+    dense_coef = ['A', 0.01], # A: qkvml共享β，C：qkvm使用不同β，L：每层使用不同β，CL：qkvm，每层均使用不同β
     mudd_dropout = 0.0,
     last_layer_static = False
   )

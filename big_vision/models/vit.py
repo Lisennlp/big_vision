@@ -619,15 +619,6 @@ def nd_dense_init(scale, mode, distribution):  # XD: from maxtext.initializers
   return init_fn
 
 
-def check_list_type(variable):
-    if isinstance(variable, list):
-        if all(isinstance(item, list) for item in variable):
-            return 2
-        return 1
-    elif variable is None:
-      return -1
-    return 0
-
 class Encoder1DBlock(nn.Module):
   """Single transformer encoder block (MHSA + MLP)."""
   mlp_dim: Optional[int] = None  # Defaults to 4x input dim
@@ -669,25 +660,23 @@ class Encoder1DBlock(nn.Module):
     )
     self.dense_activation = _convert_to_activation_function(cfg['dynamic_dense_act_cls'])
     init_v = jnp.array([0] * ((i + 1) * factor) + [1]).astype(self.param_dtype) # dense_bias_init_method == 'current_only'
-    
     init_v = init_v[None].repeat(C, 0)
     self.dense_proj2 = DenseGeneral(dw_shape, kernel_init=nn.initializers.constant(0),
                                     use_bias=False,
                                     **kwargs)
     self.dense_proj2_bias = self.param(f"dense_proj2/bias", init_fn=lambda rng: init_v)
 
-    layer_dense_coef = cfg.get('dense_coef')
-    if check_list_type(layer_dense_coef) == 2:
-      self.dense_coef = self.param(f"dense_coef_{i}", init_fn=lambda rng: layer_dense_coef[0][0] *  
-                                  jnp.ones(shape=(dw_shape[1], 1)).reshape(1, 1, 1, -1).astype(self.param_dtype))
-    elif check_list_type(layer_dense_coef) == 1:
-      self.dense_coef = self.param(f"dense_coef_{i}", init_fn=lambda rng: layer_dense_coef[0] *  
-                                  jnp.ones(shape=(dw_shape[0], 1)).reshape(1, 1, C, 1).astype(self.param_dtype))
-    elif check_list_type(layer_dense_coef) == 0:
-      self.dense_coef = self.param(f"dense_coef_{i}", init_fn=lambda rng: layer_dense_coef *  
-                                  jnp.ones(shape=(1, )).reshape(1, 1, 1, 1).astype(self.param_dtype))
-    else:
-      self.dense_coef = None
+    coef_type, coef_value = cfg.get('dense_coef', ['Unknow', 0])
+    if coef_type == 'CL':
+      coef_init_value = coef_value *  jnp.ones(shape=dw_shape).reshape(1, 1, C, -1).astype(self.param_dtype)
+    elif coef_type == 'L':
+      coef_init_value = coef_value *  jnp.ones(shape=(dw_shape[1], 1)).reshape(1, 1, 1, -1).astype(self.param_dtype)
+    elif coef_type == 'C':
+      coef_init_value = coef_value *  jnp.ones(shape=(dw_shape[0], 1)).reshape(1, 1, C, 1).astype(self.param_dtype)
+    elif coef_type == 'A':
+      coef_init_value = coef_value *  jnp.ones(shape=(1, )).reshape(1, 1, 1, 1).astype(self.param_dtype)
+
+    self.dense_coef = self.param(f"dense_coef_{i}", init_fn=lambda rng: coef_init_value)
     logging.info(f'dense_coef: {self.dense_coef.shape}')
     logging.info(f'C: {C} init_v: {init_v.shape} dw_shape: {dw_shape}')
 

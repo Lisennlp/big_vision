@@ -95,10 +95,14 @@ def get_config():
     dense_proj1_init_scale = 1.0,
     dynamic_qkvm_tanh = False,
     dynamic_qkv_tanh = False,
-    dynamic_m_tanh = True,
+    dynamic_m_tanh = False,
     dense_coef = ['L', 0.1], # A: qkvml共享β，C：qkvm使用不同β，L：每层使用不同β，CL：qkvm，每层均使用不同β
-    mudd_dropout = 0.1,
-    last_layer_static = False
+    mudd_dropout = 0.0,
+    last_layer_static = False,
+    dense2_bias_init_value = 0.0,
+    mudd_prenorm = True,
+    mudd_postnorm = True,
+    mudd_postnorm_residual_qkv = False
   )
 
   config.resume = ''

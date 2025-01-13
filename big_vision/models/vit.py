@@ -659,11 +659,11 @@ class Encoder1DBlock(nn.Module):
       **kwargs
     )
     self.dense_activation = _convert_to_activation_function(cfg['dynamic_dense_act_cls'])
-    init_v = jnp.array([0] * ((i + 1) * factor) + [1]).astype(self.param_dtype) # dense_bias_init_method == 'current_only'
+    self.dense2_bias_init_value = cfg.get('dense2_bias_init_value', 1.0)
+
+    init_v = jnp.array([0] * ((i + 1) * factor) + [self.dense2_bias_init_value]).astype(self.param_dtype) # dense_bias_init_method == 'current_only'
     init_v = init_v[None].repeat(C, 0)
-    self.dense_proj2 = DenseGeneral(dw_shape, kernel_init=nn.initializers.constant(0),
-                                    use_bias=False,
-                                    **kwargs)
+    self.dense_proj2 = DenseGeneral(dw_shape, kernel_init=nn.initializers.constant(0), use_bias=False, **kwargs)
     self.dense_proj2_bias = self.param(f"dense_proj2/bias", init_fn=lambda rng: init_v)
 
     coef_type, coef_value = cfg.get('dense_coef', ['Unknow', 0])
@@ -675,9 +675,15 @@ class Encoder1DBlock(nn.Module):
       coef_init_value = coef_value *  jnp.ones(shape=(dw_shape[0], 1)).reshape(1, 1, C, 1).astype(self.param_dtype)
     elif coef_type == 'A':
       coef_init_value = coef_value *  jnp.ones(shape=(1, )).reshape(1, 1, 1, 1).astype(self.param_dtype)
+    else:
+      coef_init_value = 0.0
 
-    self.dense_coef = self.param(f"dense_coef_{i}", init_fn=lambda rng: coef_init_value)
-    logging.info(f'dense_coef: {self.dense_coef.shape}')
+    if coef_init_value != 0.0:
+      self.dense_coef = self.param(f"dense_coef_{i}", init_fn=lambda rng: coef_init_value)
+    else:
+      self.dense_coef =  None
+
+    logging.info(f'dense_coef: {self.dense_coef}')
     logging.info(f'C: {C} init_v: {init_v.shape} dw_shape: {dw_shape}')
 
   @nn.compact
@@ -728,7 +734,9 @@ class Encoder1DBlock(nn.Module):
     x = nn.with_logical_constraint(x, ("act_batch", "act_len", "act_emb"))
 
     if cfg.get('dynamic_dense_type') is not None: # XD
-      dense_w_inner = self.dense_activation(self.dense_proj1(nn.RMSNorm(use_scale=False)(x))) # lsp: use_scale -> False
+      use_scale = True if cfg.get('mudd_prenorm') else False
+      dense_w_inner = self.dense_activation(self.dense_proj1(nn.RMSNorm(use_scale=use_scale)(x)))
+
       mudd_dropout = cfg.get('mudd_dropout', 0.0)
       logging.info(f'mudd_dropout: {mudd_dropout}')
       if mudd_dropout > 0.0:
@@ -738,7 +746,6 @@ class Encoder1DBlock(nn.Module):
       logging.info(f'static: {cfg.get("static")}')
 
       dyn_dense_kernel_out = self.dense_proj2(dense_w_inner)
-      assert len(self.dense_coef.shape) == len(dyn_dense_kernel_out.shape)
 
       if cfg.get('dynamic_qkvm_tanh'):
         dyn_dense_kernel_out = self.dense_coef * nn.tanh(dyn_dense_kernel_out)
@@ -752,7 +759,7 @@ class Encoder1DBlock(nn.Module):
         assert not cfg.get('dynamic_dense_tanh') and not cfg.get('dynamic_qkvm_tanh')
         dyn_dense_kernel_out = 0.0
       else:
-        raise ValueError(f'Unkown paramerters type...')
+        pass # no tanh
 
       if self.C == 1 and cfg.get('last_layer_static'):
         assert not cfg.get('static')
@@ -819,6 +826,9 @@ class Encoder(nn.Module):
                          num_heads=self.num_heads,
                          dropout=self.dropout)(x, deterministic)
     else:
+      # embeding pre norm
+      if cfg.get('mudd_prenorm'):
+        x = nn.RMSNorm()(x)
       # Input Encoder
       for lyr in range(self.depth):
         block_cur = Encoder1DBlock(
@@ -849,14 +859,34 @@ class Encoder(nn.Module):
 
           self.sow('intermediates', f'layer_output/norm/layer_{lyr}', l2norm(x))
 
-          hids.append(x)
+          if cfg.get('mudd_prenorm'):
+            hids.append(nn.RMSNorm(name='mudd_prenorm')(x))
+          else:
+            hids.append(x)
           C = 1 if cfg['dynamic_dense_fix_last_layer'] and i == self.depth - 1 else len(cfg['dynamic_dense_type'])
           dyn_dense_w = rearrange(dyn_dense_w, 'B T C L -> C B T L 1', C=C)
           # dense_w = jnp.asarray(getattr(self, f'dense_conn_{i}'), self.dtype)
           # dyn_dense_w = dyn_dense_w + dense_w[:, None, None, :, None]  # dynamic + static; CBTL1 + C11L1 -> CBTL1
           factor = 1
           hid_idxs = list(range((i+1) * factor + 1)) # L+1
-          x = tuple([sum([dyn_dense_w[cidx,:,:,j] * hids[j] for j in hid_idxs]) for cidx in range(C)])
+          if cfg.get('mudd_postnorm'):
+            assert not cfg.get('mudd_postnorm_residual_qkv')
+            x = tuple([x + (nn.RMSNorm(name='mudd_postnorm', scale_init=lambda rng: jnp.array(0.001))(
+                                        sum([dyn_dense_w[cidx,:,:,j] * hids[j] for j in hid_idxs])) 
+                                        if cidx == C - 1 else 
+                                        sum([dyn_dense_w[cidx,:,:,j] * hids[j] for j in hid_idxs])) for cidx in range(C)])
+          elif cfg.get('mudd_postnorm_residual_qkv'):
+            x = tuple([(hids[-1] if cidx < C - 1 else x) + (
+                                      nn.RMSNorm(name='mudd_postnorm_residual_qkv', scale_init=lambda rng: jnp.array(0.001)
+                                      )(
+                                      sum([dyn_dense_w[cidx,:,:,j] * hids[j] for j in hid_idxs])
+                                      ) if cidx == C - 1 else 
+                                      sum([dyn_dense_w[cidx,:,:,j] * hids[j] for j in hid_idxs])) 
+                                      for cidx in range(C)]
+                                      )
+            # x = tuple([(hids[-1] if cidx < C - 1 else x) + nn.RMSNorm()(sum([dyn_dense_w[cidx,:,:,j] * hids[j] for j in hid_idxs])) for cidx in range(C)])
+          else:
+            x = tuple([sum([dyn_dense_w[cidx,:,:,j] * hids[j] for j in hid_idxs]) for cidx in range(C)])
       if cfg.get('dynamic_dense_type'): x = x[0] # XD # 最后一层C=1，因此只有m
       out["pre_ln"] = x  # Alias for last block, but without the number in it.
       # self.sow('intermediates', 'final_norm', l2norm(x))
@@ -1002,9 +1032,9 @@ def decode_variant(variant):
       # pylint:disable=line-too-long
       # Reference: Table 2 of https://arxiv.org/abs/2106.04560.
       "width": {"mu": 32, "Ti": 192, "S": 384, "M": 512, 'M-B': 512, "B": 768, "L": 1024, "So400m": 1152, "H": 1280, "g": 1408, "g-opt": 1536, "G": 1664, "G-opt": 1536, "e": 1792}[v],
-      "depth": {"mu": 1, "Ti": 12, "S": 12, "M": 12, "M-B": 16, "B": 12, "L": 24, "So400m": 27, "H": 32, "g": 40, "g-opt": 40, "G": 48, "G-opt": 48, "e": 56}[v],
+      "depth": {"mu": 1, "Ti": 12, "S": 12, "M": 12, "M-B": 14, "B": 12, "L": 24, "So400m": 27, "H": 32, "g": 40, "g-opt": 40, "G": 48, "G-opt": 48, "e": 56}[v],
       "mlp_dim": {"mu": 128, "Ti": 768, "S": 1536, "M": 2048, "M-B": 2048, "B": 3072, "L": 4096, "So400m": 4304, "H": 5120, "g": 6144, "g-opt": 6144, "G": 8192, "G-opt": 8192, "e": 15360}[v],
-      "num_heads": {"mu": 2, "Ti": 3, "S": 6, "M": 8, "B": 12, "M-B": 12, "L": 16, "So400m": 16, "H": 16, "g": 16, "g-opt": 16, "G": 16, "G-opt": 16, "e": 16}[v],
+      "num_heads": {"mu": 2, "Ti": 3, "S": 6, "M": 8,  "M-B": 8, "B": 12, "L": 16, "So400m": 16, "H": 16, "g": 16, "g-opt": 16, "G": 16, "G-opt": 16, "e": 16}[v],
       # pylint:enable=line-too-long
       **patch
   }

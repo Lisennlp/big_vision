@@ -876,8 +876,7 @@ class Encoder(nn.Module):
                                         sum([dyn_dense_w[cidx,:,:,j] * hids[j] for j in hid_idxs])) for cidx in range(C)])
           elif cfg.get('mudd_postnorm_residual_qkv'):
             x = tuple([(hids[-1] if cidx < C - 1 else x) + (
-                                      nn.RMSNorm(name=f'mudd_postnorm_residual_qkv_{lyr}', scale_init=lambda rng: jnp.array(0.001)
-                                      )(
+                                      nn.RMSNorm(name=f'mudd_postnorm_residual_qkv_{lyr}', scale_init=jax.nn.initializers.constant(0.001))(
                                       sum([dyn_dense_w[cidx,:,:,j] * hids[j] for j in hid_idxs])
                                       ) if cidx == C - 1 else 
                                       sum([dyn_dense_w[cidx,:,:,j] * hids[j] for j in hid_idxs])) 

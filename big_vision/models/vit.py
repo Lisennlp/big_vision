@@ -676,9 +676,9 @@ class Encoder1DBlock(nn.Module):
     elif coef_type == 'A':
       coef_init_value = coef_value *  jnp.ones(shape=(1, )).reshape(1, 1, 1, 1).astype(self.param_dtype)
     else:
-      coef_init_value = 0.0
+      coef_init_value = None
 
-    if coef_init_value != 0.0:
+    if coef_init_value is not None:
       self.dense_coef = self.param(f"dense_coef_{i}", init_fn=lambda rng: coef_init_value)
     else:
       self.dense_coef =  None
@@ -806,6 +806,8 @@ class Encoder(nn.Module):
     logging.info(f'dc_config222: {self.dc_config}')
     cfg = self.dc_config or {}
     if cfg.get('dynamic_dense_type'): 
+      if cfg.get('mudd_prenorm'):
+        x = nn.RMSNorm(name='mudd_prenorm')(x)
       x, hids = [x] * len(cfg['dynamic_dense_type']), [x]  # XD
     out = {}
     if self.scan:
@@ -826,9 +828,6 @@ class Encoder(nn.Module):
                          num_heads=self.num_heads,
                          dropout=self.dropout)(x, deterministic)
     else:
-      # embeding pre norm
-      if cfg.get('mudd_prenorm'):
-        x = nn.RMSNorm()(x)
       # Input Encoder
       for lyr in range(self.depth):
         block_cur = Encoder1DBlock(
@@ -860,7 +859,7 @@ class Encoder(nn.Module):
           self.sow('intermediates', f'layer_output/norm/layer_{lyr}', l2norm(x))
 
           if cfg.get('mudd_prenorm'):
-            hids.append(nn.RMSNorm(name='mudd_prenorm')(x))
+            hids.append(nn.RMSNorm(name=f'mudd_prenorm_{lyr}')(x))
           else:
             hids.append(x)
           C = 1 if cfg['dynamic_dense_fix_last_layer'] and i == self.depth - 1 else len(cfg['dynamic_dense_type'])
@@ -871,13 +870,13 @@ class Encoder(nn.Module):
           hid_idxs = list(range((i+1) * factor + 1)) # L+1
           if cfg.get('mudd_postnorm'):
             assert not cfg.get('mudd_postnorm_residual_qkv')
-            x = tuple([x + (nn.RMSNorm(name='mudd_postnorm', scale_init=lambda rng: jnp.array(0.001))(
+            x = tuple([x + (nn.RMSNorm(name=f'mudd_postnorm_{lyr}', scale_init=jax.nn.initializers.constant(0.001))(
                                         sum([dyn_dense_w[cidx,:,:,j] * hids[j] for j in hid_idxs])) 
                                         if cidx == C - 1 else 
                                         sum([dyn_dense_w[cidx,:,:,j] * hids[j] for j in hid_idxs])) for cidx in range(C)])
           elif cfg.get('mudd_postnorm_residual_qkv'):
             x = tuple([(hids[-1] if cidx < C - 1 else x) + (
-                                      nn.RMSNorm(name='mudd_postnorm_residual_qkv', scale_init=lambda rng: jnp.array(0.001)
+                                      nn.RMSNorm(name=f'mudd_postnorm_residual_qkv_{lyr}', scale_init=lambda rng: jnp.array(0.001)
                                       )(
                                       sum([dyn_dense_w[cidx,:,:,j] * hids[j] for j in hid_idxs])
                                       ) if cidx == C - 1 else 

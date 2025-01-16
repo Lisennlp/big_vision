@@ -587,7 +587,7 @@ class MlpBlock(nn.Module):
         kernel_init=nn.initializers.xavier_uniform(),
         bias_init=nn.initializers.normal(stddev=1e-6),
     )
-
+    logging.info(f'[mlp] dropout: {self.dropout}')
     n, l, d = x.shape  # pylint: disable=unused-variable
     x = nn.Dense(self.mlp_dim or 4 * d, dtype=self.dtype_mm, **inits)(x)
     x = nn.gelu(x)
@@ -711,6 +711,7 @@ class Encoder1DBlock(nn.Module):
     #     dynamic_compose=cfg.get('dynamic_compose', False),
     #     normalize_qk=cfg.get('normalize_qk', False),
     # )(*inputs)  # XD
+    logging.info(f'[block] dropout: {self.dropout}')
 
     y = out["sa"] = nn.MultiHeadDotProductAttention(
         num_heads=self.num_heads,
@@ -962,6 +963,7 @@ class _Model(nn.Module):
 
     n, l, c = x.shape  # pylint: disable=unused-variable
     x = nn.Dropout(rate=self.dropout)(x, not train)
+    logging.info(f'[model]dropout: {self.dropout}')
 
     x, out["encoder"] = Encoder(
         depth=self.depth,

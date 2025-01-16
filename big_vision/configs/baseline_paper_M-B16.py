@@ -65,7 +65,7 @@ def get_config():
   # Model section
   config.model_name = 'vit'
   config.model = dict(
-      variant='S/16',
+      variant='M-B/16',
       rep_size=True,
       pool_type='gap', # tok: cls, gap: avg
       posemb='sincos2d',

@@ -510,7 +510,7 @@ def main(argv):
     write_note("Starting training loop, compiling the first step...")
     for step, batch in zip(range(first_step + 1, total_steps + 1), train_iter):
       mw.step_start(step)
-      if (step + 1) % 50000 == 0 and jax.process_index() == 0:
+      if (step + 1) % 20000 == 0 and jax.process_index() == 0:
         log_writer.flush()
         log_writer.close()
         log_writer = initialize_summary_writer(tensorboard_dir)
@@ -533,14 +533,14 @@ def main(argv):
           # mw.measure(f"global_schedule{i if i else ''}", step_ratio)
         measurements = jax.device_get(measurements)
         # keys = measurements.keys()
-        if step % 20 == 0:
+        if step % 5 == 0:
           logging.info(f'[{step}] train loss: {measurements["training_loss"]:.4f}')
           real_lr = step_ratio * u.put_cpu(config.lr)
           log_writer.add_scalar('learning_rate', real_lr, step)
           for name, value in measurements.items():
             log_writer.add_scalar(name, value, step)
 
-          if step % 500 == 0:
+          if step % 200 == 0:
             log_writer.flush() 
             
         # u.chrono.tick(step)

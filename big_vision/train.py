@@ -448,7 +448,8 @@ def main(argv):
   basename = os.path.basename(workdir.rstrip('/'))
   tensorboard_dir = os.path.join('gs://jax_llm_data_europe-west4/dcformer_compare_experiments/muddformer_logs/vit/tensorboards', basename)
   logging.info(f'tensorboard_dir: {tensorboard_dir}')
-  log_writer = initialize_summary_writer(os.path.join(tensorboard_dir, str(first_step)))
+  p = os.path.join(tensorboard_dir, str(first_step))
+  log_writer = initialize_summary_writer(p)
 
   if jax.process_index() == 0:
     try:
@@ -505,115 +506,93 @@ def main(argv):
 
   keep_steps = config.get('keep_steps', list(range(10000, 400000, 10000)))
   logging.info(f'keep_steps: {keep_steps}')
-  with metric_writers.ensure_flushes(log_writer):
-    prof = None  # Keeps track of start/stop of profiler state.
-    write_note("Starting training loop, compiling the first step...")
-    for step, batch in zip(range(first_step + 1, total_steps + 1), train_iter):
-      mw.step_start(step)
-      if (step + 1) % 10000 == 0 and jax.process_index() == 0:
-        log_writer.flush()
-        log_writer.close()
-        p = os.path.join(tensorboard_dir, str(step))
-        log_writer = initialize_summary_writer(p)
+  # with metric_writers.ensure_flushes(log_writer):
+  write_note("Starting training loop, compiling the first step...")
+  for step, batch in zip(range(first_step + 1, total_steps + 1), train_iter):
+    mw.step_start(step)
+    if (step + 1) % 5000 == 0 and jax.process_index() == 0:
+      log_writer.flush()
+      log_writer.close()
+      p = os.path.join(tensorboard_dir, str(step))
+      logging.info(f'Build new tensorboard file: {p}')
+      log_writer = initialize_summary_writer(p)
 
-      with jax.profiler.StepTraceAnnotation("train_step", step_num=step):
-        with u.chrono.log_timing("z/secs/update0", noop=step > first_step + 1):
-          with mesh, nn.logical_axis_rules([("act_batch", "data")]):
-            train_state, measurements = update_fn(train_state, batch)
+    with jax.profiler.StepTraceAnnotation("train_step", step_num=step):
+      with u.chrono.log_timing("z/secs/update0", noop=step > first_step + 1):
+        with mesh, nn.logical_axis_rules([("act_batch", "data")]):
+          train_state, measurements = update_fn(train_state, batch)
 
-      # On the first host, let's always profile a handful of early steps.
-      if jax.process_index() == 0:
-        prof = u.startstop_prof(prof, step, first_step, get_steps("log_training"))
+    for i, sched_fn_cpu in enumerate(sched_fns_cpu): # len(sched_fns_cpu) == 1
+      step_ratio = sched_fn_cpu(u.put_cpu(step - 1))
+      # mw.measure(f"global_schedule{i if i else ''}", step_ratio)
+    # if step % 5 == 0: # 加这个会变慢？很奇怪
+    measurements = jax.device_get(measurements)
+    logging.info(f'[{step}] train loss: {measurements["training_loss"]:.4f}')
 
-      # Report training progress # every log_training print
-      if (u.itstime(step, get_steps("log_training"), total_steps, host=0)
-          or u.chrono.warmup and jax.process_index() == 0):
-
-        for i, sched_fn_cpu in enumerate(sched_fns_cpu): # len(sched_fns_cpu) == 1
-          step_ratio = sched_fn_cpu(u.put_cpu(step - 1))
-          # mw.measure(f"global_schedule{i if i else ''}", step_ratio)
-        measurements = jax.device_get(measurements)
-        # keys = measurements.keys()
-        if step % 5 == 0:
-          logging.info(f'[{step}] train loss: {measurements["training_loss"]:.4f}')
-          real_lr = step_ratio * u.put_cpu(config.lr)
-          log_writer.add_scalar('learning_rate', real_lr, step)
-          for name, value in measurements.items():
-            log_writer.add_scalar(name, value, step)
-
-          if step % 200 == 0:
-            log_writer.flush() 
-            
-        # u.chrono.tick(step)
-        if not np.isfinite(measurements["training_loss"]):
-          raise RuntimeError(f"The loss became nan or inf somewhere within steps "
-                            f"[{step - get_steps('log_training')}, {step}]")
-
-        del measurements
-        
-      if step % 20 == 0:
-        gc.collect()
-      # Checkpoint saving
-      keep_ckpt_steps = get_steps("keep_ckpt", None) or total_steps
-      # itstime: get_steps("ckpt", None)为None的时候
-      if save_ckpt_path and (
-          (keep := u.itstime(step, keep_ckpt_steps, total_steps, first=False))
-          or u.itstime(step, get_steps("ckpt", None), total_steps, first=True)
-      ):
-        u.chrono.pause(wait_for=train_state)
-
-        # Copy because we add extra stuff to the checkpoint.
-        ckpt = {**train_state}
-
-        # To save chrono state correctly and safely in a multihost setup, we
-        # broadcast the state to all hosts and convert it to a global array.
-        with jax.transfer_guard("allow"):
-          chrono_ckpt = multihost_utils.broadcast_one_to_all(u.chrono.save())
-        chrono_shardings = jax.tree_map(lambda _: repl_sharding, chrono_ckpt)
-        ckpt = ckpt | {"chrono": u.reshard(chrono_ckpt, chrono_shardings)}
-        logging.info(f'\n\n[lsp]Start to save: {step} model to ‘{save_ckpt_path}’ \nkeep: {keep}\n\n')
-        if ckpt_mngr is not None:
-          u.save_checkpoint_ts(ckpt_mngr, ckpt, save_ckpt_path, step, keep, keep_steps=keep_steps)
-          
-        u.chrono.resume()
-
-      for (name, evaluator, log_steps, prefix) in evaluators():
-        if u.itstime(step, log_steps, total_steps, first=False, last=True):
-          u.chrono.pause(wait_for=train_state)
-          u.chrono.tick(step)  # Record things like epoch number, core hours etc.
-          write_note(f"{name} evaluation...\n{u.chrono.note}")
-          with u.chrono.log_timing(f"z/secs/eval/{name}"):
-            with mesh, nn.logical_axis_rules([("act_batch", "data")]):
-              for key, value in evaluator.run(train_state):
-                value = jax.device_get(value)
-                mw.measure(f"{prefix}{key}", value)
-                if jax.process_index() == 0:
-                  log_writer.add_scalar(f'{prefix}{key}', value, step)
-
-          u.chrono.resume()
-      mw.step_end()
-
-    # Always give a chance to stop the profiler, no matter how things ended.
-    # TODO: can we also do this when dying of an exception like OOM?
-    if jax.process_index() == 0 and prof is not None:
-      u.startstop_prof(prof)
-
-    # Last note needs to happen before the pool's closed =)
-    write_note(f"Done!\n{u.chrono.note}")
     if jax.process_index() == 0:
-        log_writer.close()
+      real_lr = step_ratio * u.put_cpu(config.lr)
+      log_writer.add_scalar('learning_rate', real_lr, step)
+      for name, value in measurements.items():
+        log_writer.add_scalar(name, value, step)
+      del measurements
 
-    # pool.close()
-    # pool.join()
-    mw.close()
+      if step % 50 == 0:
+        log_writer.flush() # flush一下会变慢？
+        gc.collect()
 
-    if ckpt_mngr:
-      ckpt_mngr.wait_until_finished()
+    # Checkpoint saving
+    keep_ckpt_steps = get_steps("keep_ckpt", None) or total_steps
+    # itstime: get_steps("ckpt", None)为None的时候
+    if save_ckpt_path and (
+        (keep := u.itstime(step, keep_ckpt_steps, total_steps, first=False))
+        or u.itstime(step, get_steps("ckpt", None), total_steps, first=True)
+    ):
+      u.chrono.pause(wait_for=train_state)
 
-    # Make sure all hosts stay up until the end of main.
-    u.sync()
+      # Copy because we add extra stuff to the checkpoint.
+      ckpt = {**train_state}
 
-    u.maybe_cleanup_workdir(workdir, flags.FLAGS.cleanup, info)
+      # To save chrono state correctly and safely in a multihost setup, we
+      # broadcast the state to all hosts and convert it to a global array.
+      with jax.transfer_guard("allow"):
+        chrono_ckpt = multihost_utils.broadcast_one_to_all(u.chrono.save())
+      chrono_shardings = jax.tree_map(lambda _: repl_sharding, chrono_ckpt)
+      ckpt = ckpt | {"chrono": u.reshard(chrono_ckpt, chrono_shardings)}
+      logging.info(f'\n\n[lsp]Start to save: {step} model to ‘{save_ckpt_path}’ \nkeep: {keep}\n\n')
+      if ckpt_mngr is not None:
+        u.save_checkpoint_ts(ckpt_mngr, ckpt, save_ckpt_path, step, keep, keep_steps=keep_steps)
+        
+      u.chrono.resume()
+
+    for (name, evaluator, log_steps, prefix) in evaluators():
+      if u.itstime(step, log_steps, total_steps, first=False, last=True):
+        u.chrono.pause(wait_for=train_state)
+        u.chrono.tick(step)  # Record things like epoch number, core hours etc.
+        write_note(f"{name} evaluation...\n{u.chrono.note}")
+        with u.chrono.log_timing(f"z/secs/eval/{name}"):
+          with mesh, nn.logical_axis_rules([("act_batch", "data")]):
+            for key, value in evaluator.run(train_state):
+              value = jax.device_get(value)
+              mw.measure(f"{prefix}{key}", value)
+              if jax.process_index() == 0:
+                log_writer.add_scalar(f'{prefix}{key}', value, step)
+        u.chrono.resume()
+    mw.step_end()
+
+  # Last note needs to happen before the pool's closed =)
+  write_note(f"Done!\n{u.chrono.note}")
+  if jax.process_index() == 0:
+      log_writer.close()
+
+  mw.close()
+
+  if ckpt_mngr:
+    ckpt_mngr.wait_until_finished()
+
+  # Make sure all hosts stay up until the end of main.
+  u.sync()
+
+  u.maybe_cleanup_workdir(workdir, flags.FLAGS.cleanup, info)
 
 
 if __name__ == "__main__":

@@ -448,7 +448,7 @@ def main(argv):
   basename = os.path.basename(workdir.rstrip('/'))
   tensorboard_dir = os.path.join('gs://jax_llm_data_europe-west4/dcformer_compare_experiments/muddformer_logs/vit/tensorboards', basename)
   logging.info(f'tensorboard_dir: {tensorboard_dir}')
-  log_writer = initialize_summary_writer(tensorboard_dir)
+  log_writer = initialize_summary_writer(os.path.join(tensorboard_dir, str(first_step)))
 
   if jax.process_index() == 0:
     try:
@@ -510,10 +510,11 @@ def main(argv):
     write_note("Starting training loop, compiling the first step...")
     for step, batch in zip(range(first_step + 1, total_steps + 1), train_iter):
       mw.step_start(step)
-      if (step + 1) % 20000 == 0 and jax.process_index() == 0:
+      if (step + 1) % 10000 == 0 and jax.process_index() == 0:
         log_writer.flush()
         log_writer.close()
-        log_writer = initialize_summary_writer(tensorboard_dir)
+        p = os.path.join(tensorboard_dir, str(step))
+        log_writer = initialize_summary_writer(p)
 
       with jax.profiler.StepTraceAnnotation("train_step", step_num=step):
         with u.chrono.log_timing("z/secs/update0", noop=step > first_step + 1):

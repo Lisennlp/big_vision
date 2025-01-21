@@ -646,6 +646,8 @@ class Encoder1DBlock(nn.Module):
     if cfg['dynamic_dense_hidden_round']:  # default: round to 64 or 128
       # assert dynamic_dense_inter_dim < 128
       dynamic_dense_inter_dim = (dynamic_dense_inter_dim// 64 +1) * 64
+    
+    # dynamic_dense_inter_dim = 16
     logging.info(f'dynamic_dense_inter_dim111: {dynamic_dense_inter_dim}')
 
     self.inner_scale = jnp.sqrt(dynamic_dense_inter_dim) if cfg.get('inner_scale') else 1.0

@@ -640,11 +640,15 @@ class Encoder1DBlock(nn.Module):
     self.C = C
     dw_shape = (C, ((i + 1) * factor + 1)) # 加词向量那一层。因此最后总层数+1
     dynamic_dense_inter_dim = int(math.prod(dw_shape) * cfg['dynamic_dense_hidden_expand'])
+    logging.info(f'dynamic_dense_inter_dim000: {dynamic_dense_inter_dim}')
     if cfg['dynamic_dense_fix_last_layer'] and i == self.num_decoder_layers - 1:
       dynamic_dense_inter_dim *= len(cfg['dynamic_dense_type'])
     if cfg['dynamic_dense_hidden_round']:  # default: round to 64 or 128
       # assert dynamic_dense_inter_dim < 128
       dynamic_dense_inter_dim = (dynamic_dense_inter_dim// 64 +1) * 64
+    logging.info(f'dynamic_dense_inter_dim111: {dynamic_dense_inter_dim}')
+
+    self.inner_scale = jnp.sqrt(dynamic_dense_inter_dim) if cfg.get('inner_scale') else 1.0
 
     kwargs = dict(
       dtype=self.dtype_mm,
@@ -660,6 +664,8 @@ class Encoder1DBlock(nn.Module):
     )
     self.dense_activation = _convert_to_activation_function(cfg['dynamic_dense_act_cls'])
     self.dense2_bias_init_value = cfg.get('dense2_bias_init_value', 1.0)
+
+    logging.info(f'dense2_bias_init_value: {self.dense2_bias_init_value}')
 
     init_v = jnp.array([0] * ((i + 1) * factor) + [self.dense2_bias_init_value]).astype(self.param_dtype) # dense_bias_init_method == 'current_only'
     init_v = init_v[None].repeat(C, 0)
@@ -684,7 +690,7 @@ class Encoder1DBlock(nn.Module):
       self.dense_coef =  None
 
     logging.info(f'dense_coef: {self.dense_coef}')
-    logging.info(f'C: {C} init_v: {init_v.shape} dw_shape: {dw_shape}')
+    logging.info(f'C: {C} init_v: {init_v.shape} dw_shape: {dw_shape}\n\n{init_v}\n\n')
 
   @nn.compact
   def __call__(self, x, deterministic=True):
@@ -736,7 +742,12 @@ class Encoder1DBlock(nn.Module):
 
     if cfg.get('dynamic_dense_type') is not None: # XD
       use_scale = True if cfg.get('mudd_prenorm') else False
-      dense_w_inner = self.dense_activation(self.dense_proj1(nn.RMSNorm(use_scale=use_scale)(x)))
+      logging.info(f'xxxx: {x.shape}')
+      logging.info(f'self.dense_proj1: {self.dense_proj1}')
+
+      inner_activation = self.dense_proj1(nn.RMSNorm(use_scale=use_scale)(x))
+      inner_activation = inner_activation / self.inner_scale
+      dense_w_inner = self.dense_activation(inner_activation)
 
       mudd_dropout = cfg.get('mudd_dropout', 0.0)
       logging.info(f'mudd_dropout: {mudd_dropout}')

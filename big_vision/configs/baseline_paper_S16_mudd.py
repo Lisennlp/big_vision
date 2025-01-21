@@ -92,20 +92,21 @@ def get_config():
     dynamic_dense_type = 'qkvm',
     dynamic_dense_fix_last_layer = True,
     dynamic_dense_hidden_expand = 1,
-    dynamic_dense_hidden_round = False, # True -> false
+    dynamic_dense_hidden_round = True, # True -> false
     dynamic_dense_act_cls = 'gelu',
     static = False,
     dense_proj1_init_scale = 1.0,
-    dynamic_qkvm_tanh = True, # hc tanh
+    dynamic_qkvm_tanh = False, # hc tanh
     dynamic_qkv_tanh = False,
     dynamic_m_tanh = False,
-    dense_coef = ['A', 0.01], # A: qkvml共享β，C：qkvm使用不同β，L：每层使用不同β，CL：qkvm，每层均使用不同β
+    dense_coef = ['LLL', 0.01], # A: qkvml共享β，C：qkvm使用不同β，L：每层使用不同β，CL：qkvm，每层均使用不同β
     mudd_dropout = 0.0,
     last_layer_static = False,
-    dense2_bias_init_value = 1.0,
+    dense2_bias_init_value = 1.0,  # prepost norm的时候初始化为0
     mudd_prenorm = False,
     mudd_postnorm = False,
-    mudd_postnorm_residual_qkv = False
+    inner_scale=False,
+    mudd_postnorm_residual_qkv = False,
   )
 
   config.resume = ''

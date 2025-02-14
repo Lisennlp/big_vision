@@ -107,6 +107,7 @@ def get_config():
     mudd_postnorm = True,
     inner_scale=True,
     mudd_postnorm_residual_qkv = False,
+    dynamic_mlp_dim = True
   )
 
   config.resume = ''

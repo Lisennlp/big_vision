@@ -694,6 +694,12 @@ class Encoder1DBlock(nn.Module):
     logging.info(f'dense_coef: {self.dense_coef}')
     logging.info(f'C: {C} init_v: {init_v.shape} dw_shape: {dw_shape}\n\n{init_v}\n\n')
 
+    if cfg.dynamic_mlp_dim:
+      self.updated_mlp_dim = round(cfg.mlp_dim * (i / (self.num_decoder_layers - 1) + 0.5) / 128) * 128 
+    else:
+      self.updated_mlp_dim = cfg.mlp_dim
+    max_logging.log(f'updated_mlp_dim: {self.updated_mlp_dim}')
+
   @nn.compact
   def __call__(self, x, deterministic=True):
     cfg = self.dc_config or {}
@@ -733,10 +739,10 @@ class Encoder1DBlock(nn.Module):
     x = out["+sa"] = x + y
 
     y = nn.LayerNorm()(x)
-    y = out["mlp"] = MlpBlock(
-        mlp_dim=self.mlp_dim, dropout=self.dropout,
-        dtype_mm=self.dtype_mm,
-    )(y, deterministic)
+    y = out["mlp"] = MlpBlock(mlp_dim=self.updated_mlp_dim,  # lsp
+                              dropout=self.dropout,
+                              dtype_mm=self.dtype_mm,
+                          )(y, deterministic)
     y = nn.with_logical_constraint(y, ("act_batch", "act_len", "act_emb"))
     y = nn.Dropout(rate=self.dropout)(y, deterministic)
     x = out["+mlp"] = x + y
@@ -821,8 +827,8 @@ class Encoder(nn.Module):
     cfg = self.dc_config or {}
     if cfg.get('dynamic_dense_type'): 
       if cfg.get('mudd_prenorm'):
-        x = nn.RMSNorm(name='mudd_prenorm')(x)
-      x, hids = [x] * len(cfg['dynamic_dense_type']), [x]  # XD
+        x_normed = nn.RMSNorm(name='mudd_prenorm')(x)
+      x, hids = [x] * len(cfg['dynamic_dense_type']), [x_normed]  # XD
     out = {}
     if self.scan:
       block = nn.remat(

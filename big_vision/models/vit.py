@@ -695,10 +695,10 @@ class Encoder1DBlock(nn.Module):
     logging.info(f'C: {C} init_v: {init_v.shape} dw_shape: {dw_shape}\n\n{init_v}\n\n')
 
     if cfg.dynamic_mlp_dim:
-      self.updated_mlp_dim = round(cfg.mlp_dim * (i / (self.num_decoder_layers - 1) + 0.5) / 128) * 128 
+      self.updated_mlp_dim = round(self.mlp_dim * (i / (self.num_decoder_layers - 1) + 0.5) / 128) * 128 
     else:
-      self.updated_mlp_dim = cfg.mlp_dim
-    max_logging.log(f'updated_mlp_dim: {self.updated_mlp_dim}')
+      self.updated_mlp_dim = self.mlp_dim
+    logging.info(f'updated_mlp_dim: {self.updated_mlp_dim}')
 
   @nn.compact
   def __call__(self, x, deterministic=True):
